@@ -64,6 +64,15 @@ namespace PBMAdjudicationService
                 new Prescription
                 {
                     PatientId = "P001",
+                    PatientName = "Michael Davis",
+                    Medication = "Omeprazole 20mg",
+                    EligibleDate = DateTime.UtcNow.AddMinutes(2),
+                    RefillsRemaining = 5,
+                    Status = "Pending"
+                },
+                new Prescription
+                {
+                    PatientId = "P002",
                     PatientName = "John Smith",
                     Medication = "Lipitor 20mg",
                     EligibleDate = DateTime.UtcNow.AddDays(-1),
@@ -72,16 +81,16 @@ namespace PBMAdjudicationService
                 },
                 new Prescription
                 {
-                    PatientId = "P002",
+                    PatientId = "P003",
                     PatientName = "Mary Johnson",
                     Medication = "Metformin 500mg",
-                    EligibleDate = DateTime.UtcNow.AddHours(2),
+                    EligibleDate = DateTime.UtcNow.AddMinutes(20),
                     RefillsRemaining = 2,
                     Status = "Pending"
                 },
                 new Prescription
                 {
-                    PatientId = "P003",
+                    PatientId = "P004",
                     PatientName = "Robert Williams",
                     Medication = "Lisinopril 10mg",
                     EligibleDate = DateTime.UtcNow.AddDays(-5),
@@ -90,22 +99,13 @@ namespace PBMAdjudicationService
                 },
                 new Prescription
                 {
-                    PatientId = "P004",
+                    PatientId = "P005",
                     PatientName = "Patricia Brown",
                     Medication = "Atorvastatin 40mg",
                     EligibleDate = DateTime.UtcNow.AddDays(-3),
                     RefillsRemaining = 1,
                     Status = "Pending"
                 },
-                new Prescription
-                {
-                    PatientId = "P005",
-                    PatientName = "Michael Davis",
-                    Medication = "Omeprazole 20mg",
-                    EligibleDate = DateTime.UtcNow.AddMinutes(30),
-                    RefillsRemaining = 5,
-                    Status = "Pending"
-                }
             };
 
             foreach (var rx in prescriptions)
