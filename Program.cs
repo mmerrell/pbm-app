@@ -90,7 +90,7 @@ namespace PBMAdjudicationService
                     PatientId = "P003",
                     PatientName = "Mary Johnson",
                     Medication = "Metformin 500mg",
-                    EligibleDate = DateTime.UtcNow.AddHours(5),
+                    EligibleDate = DateTime.UtcNow.AddMinutes(20),
                     RefillsRemaining = 2,
                     Status = "Pending"
                 },
@@ -290,144 +290,80 @@ namespace PBMAdjudicationService
             // STEP 1: Validate Eligibility
             app.MapPost("/api/validate/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
-                for (int attempt = 1; attempt <= 3; attempt++)
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
                 {
-                    try
-                    {
-                        await EndpointHelper.SimulateEndpointBehavior("validate", hubContext);
-
-                        if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                        {
-                            return Results.NotFound();
-                        }
-
-                        prescription.Status = "Validating";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Checking eligibility for {prescription.PatientName}");
-
-                        if (DateTime.UtcNow < prescription.EligibleDate)
-                        {
-                            var waitTime = prescription.EligibleDate - DateTime.UtcNow;
-                            await hubContext.Clients.All.SendAsync("ReceiveLog",
-                                $"⏰ [validate] Not eligible until {prescription.EligibleDate:yyyy-MM-dd HH:mm:ss} (waiting {waitTime.TotalMinutes:F1} minutes)");
-
-                            prescription.Status = "Waiting";
-                            await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                            return Results.Ok(new { eligible = false, waitUntil = prescription.EligibleDate });
-                        }
-
-                        prescription.Status = "Validated";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Prescription eligible for {prescription.PatientName}");
-
-                        return Results.Ok(new { eligible = true });
-                    }
-                    catch (Exception ex)
-                    {
-                        if (attempt == 3)
-                        {
-                            await hubContext.Clients.All.SendAsync("ReceiveLog", $"💥 [validate] Failed after 3 attempts: {ex.Message}");
-                            throw;
-                        }
-
-                        var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"⚠️ [validate] Attempt {attempt} failed, retrying in {backoff.TotalSeconds}s...");
-                        await Task.Delay(backoff);
-                    }
+                    return Results.NotFound();
                 }
 
-                return Results.Problem("Validation failed");
+                prescription.Status = "Validating";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Checking eligibility for {prescription.PatientName}");
+
+                await EndpointHelper.SimulateEndpointBehavior("validate", hubContext);
+
+                if (DateTime.UtcNow < prescription.EligibleDate)
+                {
+                    var waitTime = prescription.EligibleDate - DateTime.UtcNow;
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"⏰ [validate] Not eligible until {prescription.EligibleDate:yyyy-MM-dd HH:mm:ss} (waiting {waitTime.TotalMinutes:F1} minutes)");
+
+                    prescription.Status = "Waiting";
+                    await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                    return Results.Ok(new { eligible = false, waitUntil = prescription.EligibleDate });
+                }
+
+                prescription.Status = "Validated";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Prescription eligible for {prescription.PatientName}");
+
+                return Results.Ok(new { eligible = true });
             });
 
             // STEP 2: Check Prior Authorization
             app.MapPost("/api/authorize/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
-                for (int attempt = 1; attempt <= 3; attempt++)
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
                 {
-                    try
-                    {
-                        await EndpointHelper.SimulateEndpointBehavior("authorize", hubContext);
-
-                        if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                        {
-                            return Results.NotFound();
-                        }
-
-                        prescription.Status = "Authorizing";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Checking prior authorization for {prescription.Medication}");
-
-                        await Task.Delay(100);
-
-                        prescription.Status = "Authorized";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Authorization approved for {prescription.Medication}");
-
-                        return Results.Ok(new { authorized = true });
-                    }
-                    catch (Exception ex)
-                    {
-                        if (attempt == 3)
-                        {
-                            await hubContext.Clients.All.SendAsync("ReceiveLog", $"💥 [authorize] Failed after 3 attempts: {ex.Message}");
-                            throw;
-                        }
-
-                        var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"⚠️ [authorize] Attempt {attempt} failed, retrying in {backoff.TotalSeconds}s...");
-                        await Task.Delay(backoff);
-                    }
+                    return Results.NotFound();
                 }
 
-                return Results.Problem("Authorization failed");
+                prescription.Status = "Authorizing";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Checking prior authorization for {prescription.Medication}");
+
+                await EndpointHelper.SimulateEndpointBehavior("authorize", hubContext);
+                await Task.Delay(100);
+
+                prescription.Status = "Authorized";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Authorization approved for {prescription.Medication}");
+
+                return Results.Ok(new { authorized = true });
             });
 
             // STEP 3: Adjudicate Claim
             app.MapPost("/api/adjudicate/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
-                for (int attempt = 1; attempt <= 3; attempt++)
+                await EndpointHelper.SimulateEndpointBehavior("adjudicate", hubContext);
+
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
                 {
-                    try
-                    {
-                        await EndpointHelper.SimulateEndpointBehavior("adjudicate", hubContext);
-
-                        if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                        {
-                            return Results.NotFound();
-                        }
-
-                        prescription.Status = "Adjudicating";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating copay for {prescription.Medication}");
-
-                        await Task.Delay(100);
-                        prescription.Copay = Random.Shared.Next(5, 50);
-
-                        prescription.Status = "Adjudicated";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"✅ [adjudicate] Copay calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
-
-                        return Results.Ok(new { copay = prescription.Copay });
-                    }
-                    catch (Exception ex)
-                    {
-                        if (attempt == 3)
-                        {
-                            await hubContext.Clients.All.SendAsync("ReceiveLog", $"💥 [adjudicate] Failed after 3 attempts: {ex.Message}");
-                            throw;
-                        }
-
-                        var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"⚠️ [adjudicate] Attempt {attempt} failed, retrying in {backoff.TotalSeconds}s...");
-                        await Task.Delay(backoff);
-                    }
+                    return Results.NotFound();
                 }
 
-                return Results.Problem("Adjudication failed");
+                prescription.Status = "Adjudicating";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating copay for {prescription.Medication}");
+
+                await Task.Delay(100);
+                prescription.Copay = Random.Shared.Next(5, 50);
+
+                prescription.Status = "Adjudicated";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"✅ [adjudicate] Copay calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
+
+                return Results.Ok(new { copay = prescription.Copay });
             });
 
             // STEP 4: Request Doctor Approval (if needed)
@@ -508,91 +444,60 @@ namespace PBMAdjudicationService
                 var workflowId = $"prescription-{prescription.PatientId}-{approval.PrescriptionId}";
                 var handle = client.GetWorkflowHandle(workflowId);
 
-                try
+                if (approved)
                 {
-                    if (approved)
-                    {
-                        await handle.SignalAsync((PrescriptionWorkflow wf) => wf.ApproveAsync());
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"✅ [temporal] Doctor approved workflow for {prescription.PatientName}");
-
-                        // Update local state
-                        approval.IsApproved = true;
-                        prescription.Status = "Approved";
-                        prescription.RefillsRemaining = 3;
-                    }
-                    else
-                    {
-                        await handle.SignalAsync((PrescriptionWorkflow wf) => wf.DenyAsync());
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"❌ [temporal] Doctor denied workflow for {prescription.PatientName}");
-
-                        // Update local state
-                        approval.IsDenied = true;
-                        prescription.Status = "Denied";
-                    }
-
-                    await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                    await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
-
-                    return Results.Ok();
-                }
-                catch (Temporalio.Exceptions.RpcException ex) when (ex.Message.Contains("already completed"))
-                {
-                    // Workflow already completed (didn't need approval)
+                    await handle.SignalAsync((PrescriptionWorkflow wf) => wf.ApproveAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"⚠️ [temporal] Workflow already completed for {prescription.PatientName} - approval not needed");
-                    return Results.Ok();
+                        $"✅ [temporal] Doctor approved workflow for {prescription.PatientName}");
+
+                    // Update local state
+                    approval.IsApproved = true;
+                    prescription.Status = "Approved";
+                    prescription.RefillsRemaining = 3;
                 }
+                else
+                {
+                    await handle.SignalAsync((PrescriptionWorkflow wf) => wf.DenyAsync());
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"❌ [temporal] Doctor denied workflow for {prescription.PatientName}");
+
+                    // Update local state
+                    approval.IsDenied = true;
+                    prescription.Status = "Denied";
+                }
+
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
+
+                return Results.Ok();
             });
 
             // STEP 5: Submit to Pharmacy
             app.MapPost("/api/submit/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
-                for (int attempt = 1; attempt <= 3; attempt++)
+                await EndpointHelper.SimulateEndpointBehavior("submit", hubContext);
+
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
                 {
-                    try
-                    {
-                        await EndpointHelper.SimulateEndpointBehavior("submit", hubContext);
-
-                        if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                        {
-                            return Results.NotFound();
-                        }
-
-                        prescription.Status = "Submitting";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                        await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to pharmacy for {prescription.PatientName}");
-
-                        await Task.Delay(100);
-
-                        prescription.Status = "Completed";
-                        await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-
-                        await EndpointHelper.SendNotification("patient", prescription.PatientName,
-                            $"Your prescription for {prescription.Medication} has been sent to your pharmacy. Copay: ${prescription.Copay:F2}", hubContext);
-
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"✅ [submit] Prescription completed for {prescription.PatientName}");
-
-                        return Results.Ok(new { submitted = true });
-                    }
-                    catch (Exception ex)
-                    {
-                        if (attempt == 3)
-                        {
-                            await hubContext.Clients.All.SendAsync("ReceiveLog", $"💥 [submit] Failed after 3 attempts: {ex.Message}");
-                            throw;
-                        }
-
-                        var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt));
-                        await hubContext.Clients.All.SendAsync("ReceiveLog",
-                            $"⚠️ [submit] Attempt {attempt} failed, retrying in {backoff.TotalSeconds}s...");
-                        await Task.Delay(backoff);
-                    }
+                    return Results.NotFound();
                 }
 
-                return Results.Problem("Submission failed");
+                prescription.Status = "Submitting";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to pharmacy for {prescription.PatientName}");
+
+                await Task.Delay(100);
+
+                prescription.Status = "Completed";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+
+                await EndpointHelper.SendNotification("patient", prescription.PatientName,
+                    $"Your prescription for {prescription.Medication} has been sent to your pharmacy. Copay: ${prescription.Copay:F2}", hubContext);
+
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"✅ [submit] Prescription completed for {prescription.PatientName}");
+
+                return Results.Ok(new { submitted = true });
             });
 
             // Generate load for testing (20 prescriptions)
@@ -736,6 +641,61 @@ namespace PBMAdjudicationService
                     $"🚀 [temporal] Started workflow for {prescription.PatientName}");
 
                 return Results.Ok(new { workflowId });
+            });
+
+            app.MapPost("/api/prescriptions", async (Prescription prescription, IHubContext<NotificationHub> hubContext) =>
+            {
+                DataStore.Prescriptions[prescription.Id] = prescription;
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"📝 [admin] Created new prescription for {prescription.PatientName}");
+                return Results.Ok(prescription);
+            });
+
+            // Handle approval timeout
+            app.MapPost("/api/approval-timeout/{prescriptionId}", async (
+                string prescriptionId,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
+                {
+                    return Results.NotFound();
+                }
+
+                // Find and mark approval request as timed out
+                var approval = DataStore.ApprovalRequests.Values
+                    .FirstOrDefault(a => a.PrescriptionId == prescriptionId && !a.IsApproved && !a.IsDenied);
+
+                if (approval != null)
+                {
+                    approval.IsDenied = true; // Mark as denied due to timeout
+                    await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
+                }
+
+                prescription.Status = "ApprovalTimeout";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"⏰ [approval] Approval timeout for {prescription.PatientName} - no response from doctor");
+
+                return Results.Ok();
+            });
+
+            // Mark prescription on hold (submission failed)
+            app.MapPost("/api/on-hold/{prescriptionId}", async (
+                string prescriptionId,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
+                {
+                    return Results.NotFound();
+                }
+
+                prescription.Status = "OnHold";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"⚠️ [admin] Prescription on hold for {prescription.PatientName} - pharmacy submission failed, awaiting manual intervention");
+
+                return Results.Ok();
             });
 
             app.Run();

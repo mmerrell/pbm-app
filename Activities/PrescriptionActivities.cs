@@ -120,5 +120,29 @@ namespace PBMAdjudicationService.Activities
                 Submitted = root.TryGetProperty("submitted", out var submittedProp) && submittedProp.GetBoolean()
             };
         }
+
+        [Activity]
+        public async Task HandleApprovalTimeoutAsync(string prescriptionId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_baseUrl}/api/approval-timeout/{prescriptionId}", null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Timeout handling failed: {response.StatusCode}");
+            }
+        }
+
+        [Activity]
+        public async Task MarkOnHoldAsync(string prescriptionId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_baseUrl}/api/on-hold/{prescriptionId}", null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Failed to mark on hold: {response.StatusCode}");
+            }
+        }
     }
 }

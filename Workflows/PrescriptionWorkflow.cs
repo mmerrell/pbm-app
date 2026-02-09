@@ -26,13 +26,12 @@ namespace PBMAdjudicationService.Workflows
                         InitialInterval = TimeSpan.FromSeconds(1),
                         MaximumInterval = TimeSpan.FromSeconds(10),
                         BackoffCoefficient = 2,
-                        MaximumAttempts = 3
+                        MaximumAttempts = 10
                     }
                 });
 
             if (!validated.Eligible && validated.EligibleDate.HasValue)
             {
-                // Not eligible yet - use Temporal's durable timer!
                 result.Status = "Waiting";
                 var waitTime = validated.EligibleDate.Value - Workflow.UtcNow;
                 if (waitTime > TimeSpan.Zero)
@@ -58,7 +57,7 @@ namespace PBMAdjudicationService.Workflows
                         InitialInterval = TimeSpan.FromSeconds(1),
                         MaximumInterval = TimeSpan.FromSeconds(10),
                         BackoffCoefficient = 2,
-                        MaximumAttempts = 3
+                        MaximumAttempts = 10
                     }
                 });
 
@@ -75,7 +74,7 @@ namespace PBMAdjudicationService.Workflows
                         InitialInterval = TimeSpan.FromSeconds(1),
                         MaximumInterval = TimeSpan.FromSeconds(10),
                         BackoffCoefficient = 2,
-                        MaximumAttempts = 3
+                        MaximumAttempts = 10
                     }
                 });
 
@@ -91,9 +90,23 @@ namespace PBMAdjudicationService.Workflows
             {
                 result.Status = "ApprovalNeeded";
 
-                // Wait for signal from doctor - this is the human-in-the-loop!
-                // Workflow will pause here indefinitely until signal received
-                await Workflow.WaitConditionAsync(() => approvalReceived || approvalDenied);
+                // Wait up to 2 minutes for doctor approval
+                var receivedResponse = await Workflow.WaitConditionAsync(
+                    () => approvalReceived || approvalDenied,
+                    TimeSpan.FromMinutes(2)
+                );
+
+                if (!receivedResponse)
+                {
+                    // Timeout! Mark approval as timed out
+                    await Workflow.ExecuteActivityAsync(
+                        (PrescriptionActivities a) => a.HandleApprovalTimeoutAsync(input.PrescriptionId),
+                        new ActivityOptions { StartToCloseTimeout = TimeSpan.FromMinutes(5) });
+
+                    result.Status = "ApprovalTimeout";
+                    result.Success = false;
+                    return result;
+                }
 
                 if (approvalDenied)
                 {
@@ -106,22 +119,37 @@ namespace PBMAdjudicationService.Workflows
             }
 
             // Step 5: Submit to Pharmacy
-            await Workflow.ExecuteActivityAsync(
-                (PrescriptionActivities a) => a.SubmitToPharmacyAsync(input.PrescriptionId),
-                new ActivityOptions
-                {
-                    StartToCloseTimeout = TimeSpan.FromMinutes(5),
-                    RetryPolicy = new()
+            try
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (PrescriptionActivities a) => a.SubmitToPharmacyAsync(input.PrescriptionId),
+                    new ActivityOptions
                     {
-                        InitialInterval = TimeSpan.FromSeconds(1),
-                        MaximumInterval = TimeSpan.FromSeconds(10),
-                        BackoffCoefficient = 2,
-                        MaximumAttempts = 3
-                    }
-                });
+                        StartToCloseTimeout = TimeSpan.FromMinutes(5),
+                        RetryPolicy = new()
+                        {
+                            InitialInterval = TimeSpan.FromSeconds(1),
+                            MaximumInterval = TimeSpan.FromSeconds(10),
+                            BackoffCoefficient = 2,
+                            MaximumAttempts = 10
+                        }
+                    });
 
-            result.Status = "Completed";
-            result.Success = true;
+                result.Status = "Completed";
+                result.Success = true;
+            }
+            catch (Temporalio.Exceptions.ActivityFailureException)
+            {
+                // Pharmacy submission failed - needs manual intervention
+                result.Status = "OnHold";
+                result.Success = false;  // Mark as failed so it's obvious
+
+                // Call activity to update backend status
+                await Workflow.ExecuteActivityAsync(
+                    (PrescriptionActivities a) => a.MarkOnHoldAsync(input.PrescriptionId),
+                    new ActivityOptions { StartToCloseTimeout = TimeSpan.FromMinutes(1) });
+            }
+
             return result;
         }
 
