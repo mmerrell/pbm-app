@@ -1,0 +1,1486 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PBM Adjudication System</title>
+    <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.14/dist/browser/signalr.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            padding: 10px;
+            height: 100vh;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            font-size: 20px;
+            font-weight: bold;
+            text-align: center;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .prescription-card {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .prescription-card h3 {
+            margin-bottom: 6px;
+            color: #333;
+            font-size: 16px;
+            padding-right: 80px; /* Make room for copay badge */
+        }
+
+        .prescription-card .medication {
+            font-size: 16px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 8px;
+        }
+
+        .prescription-card .copay-badge {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 14px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .prescription-card .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .prescription-card .detail {
+            color: #666;
+            font-size: 12px;
+        }
+
+        .prescription-card .detail-right {
+            color: #666;
+            font-size: 12px;
+            text-align: right;
+        }
+
+        /* Timeline Styles */
+        .timeline {
+            display: flex;
+            align-items: center;
+            margin-top: 25px;
+            position: relative;
+            padding-top: 5px;
+        }
+
+        .timeline-line {
+            position: absolute;
+            top: 13px;  /* Changed from 8px to center on 16px pips */
+            left: 8px;
+            right: 8px;
+            height: 2px;
+            background: #ddd;
+            z-index: 1;
+        }
+
+        .timeline-steps {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            position: relative;
+            z-index: 2;
+        }
+
+        .timeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        .timeline-pip {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ddd;
+            border: 2px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .timeline-pip.completed {
+            background: #28a745;
+            border-color: #28a745;
+            color: white;
+        }
+
+        .timeline-pip.current {
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            border-color: #667eea;
+            color: white;
+            animation: pulse 2s infinite;
+        }
+
+        .timeline-pip.failed {
+            background: #dc3545;
+            border-color: #dc3545;
+            color: white;
+        }
+
+        .timeline-pip.infra-failed {
+            background: #ff9800;
+            border-color: #ff9800;
+            color: white;
+        }
+
+        .timeline-pip.waiting {
+            background: #ff9800;
+            border-color: #ff9800;
+            color: white;
+        }
+
+        .timeline-pip.skipped {
+            background: #e9ecef;
+            border-color: #adb5bd;
+            color: #6c757d;
+            font-size: 8px;
+        }
+
+        .timeline-pip.retrying {
+            background: #17a2b8;
+            border-color: #17a2b8;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        .timeline-label {
+            position: absolute;
+            top: -22px;
+            font-size: 9px;
+            font-weight: bold;
+            color: white;
+            white-space: nowrap;
+            background: #ff9800;  /* Orange background */
+            padding: 3px 8px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+
+        .timeline-tooltip {
+            position: absolute;
+            bottom: 25px;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 10px;
+            white-space: nowrap;
+            display: none;
+            z-index: 100;
+            left: 50%;
+            transform: translateX(-50%);
+            min-width: 120px;
+            text-align: center;
+        }
+
+        /* First step tooltip - align left to avoid cutoff */
+        .timeline-step:first-child .timeline-tooltip {
+            left: 0;
+            transform: none;
+        }
+
+        /* Last step tooltip - align right to avoid cutoff */
+        .timeline-step:last-child .timeline-tooltip {
+            left: auto;
+            right: 0;
+            transform: none;
+        }
+
+        .timeline-step:hover .timeline-tooltip {
+            display: block;
+        }
+
+        /* Doctor Portal Styles */
+        .approval-card {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 4px;
+        }
+
+        .approval-card h3 {
+            margin-bottom: 6px;
+            color: #333;
+            font-size: 16px;
+        }
+
+        .approval-card .medication {
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 6px;
+        }
+
+        .approval-card .timestamp {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .approval-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s;
+            font-size: 13px;
+        }
+
+        .btn-approve {
+            background: #28a745;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-approve:hover {
+            background: #218838;
+        }
+
+        .btn-deny {
+            background: #dc3545;
+            color: white;
+            flex: 1;
+        }
+
+        .btn-deny:hover {
+            background: #c82333;
+        }
+
+        .btn-new-request {
+            background: white;
+            color: #667eea;
+            border: 2px solid white;
+            padding: 6px 12px;
+            font-size: 14px;
+        }
+
+        .btn-new-request:hover {
+            background: rgba(255,255,255,0.9);
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #999;
+            padding: 40px 20px;
+            font-size: 14px;
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        .modal-header {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        .form-group label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 13px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-submit {
+            flex: 1;
+            background: #667eea;
+            color: white;
+            padding: 10px;
+        }
+
+        .btn-submit:hover {
+            background: #5568d3;
+        }
+
+        .btn-cancel {
+            flex: 1;
+            background: #6c757d;
+            color: white;
+            padding: 10px;
+        }
+
+        .btn-cancel:hover {
+            background: #5a6268;
+        }
+
+        /* Confirmation Modal */
+        .confirm-modal {
+            display: none;
+            position: fixed;
+            z-index: 2000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .confirm-modal.show {
+            display: flex;
+        }
+
+        .confirm-content {
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 400px;
+            width: 90%;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        .confirm-message {
+            font-size: 16px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        .confirm-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-confirm-yes {
+            flex: 1;
+            background: #dc3545;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-confirm-yes:hover {
+            background: #c82333;
+        }
+
+        .btn-confirm-no {
+            flex: 1;
+            background: #6c757d;
+            color: white;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .btn-confirm-no:hover {
+            background: #5a6268;
+        }
+
+        /* Control Panel Styles */
+        .admin-section {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .admin-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn-admin {
+            flex: 1;
+            padding: 10px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        .btn-admin:hover {
+            background: #5568d3;
+        }
+
+        .btn-reset {
+            background: #dc3545;
+        }
+
+        .btn-reset:hover {
+            background: #c82333;
+        }
+
+        .endpoint-config {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+
+        .endpoint-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .endpoint-config h3 {
+            color: #333;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin: 0;
+        }
+
+        .control-group {
+            margin-bottom: 8px;
+        }
+
+        .control-label {
+            display: block;
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 3px;
+            font-weight: bold;
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            height: 4px;
+            border-radius: 2px;
+            background: #ddd;
+            outline: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+
+        .slider-value {
+            min-width: 50px;
+            text-align: right;
+            font-weight: bold;
+            color: #667eea;
+            font-size: 11px;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 44px;
+            height: 22px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #28a745;
+            transition: .3s;
+            border-radius: 22px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .toggle-slider {
+            background-color: #dc3545;
+        }
+
+        input:checked + .toggle-slider:before {
+            transform: translateX(22px);
+        }
+
+        .logs-section {
+            margin-top: 15px;
+        }
+
+        .logs-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .logs-header h3 {
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #333;
+        }
+
+        .btn-clear-logs {
+            padding: 4px 10px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+
+        .btn-clear-logs:hover {
+            background: #5a6268;
+        }
+
+        .logs-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 10px;
+            border-radius: 4px;
+            height: 250px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 3px;
+            word-wrap: break-word;
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1000;
+            cursor: pointer;
+            transition: all 0.3s;
+            user-select: none;
+        }
+
+        .connection-status:hover {
+            transform: scale(1.05);
+        }
+
+        .connection-status.connected {
+            background: #28a745;
+            color: white;
+        }
+
+        .connection-status.disconnected {
+            background: #dc3545;
+            color: white;
+        }
+
+        .connection-status.auto-mode {
+            background: #667eea;
+            color: white;
+        }
+
+        .status-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            z-index: 1001;
+            display: none;
+            max-width: 200px;
+        }
+
+        .status-tooltip.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="connection-status" id="connectionStatus" onclick="toggleAutoProcess()" onmouseenter="showStatusTooltip(event)" onmouseleave="hideStatusTooltip()">
+        Connecting...
+    </div>
+    <div class="status-tooltip" id="statusTooltip"></div>
+
+    <!-- New Request Modal -->
+    <div class="modal" id="newRequestModal">
+        <div class="modal-content">
+            <div class="modal-header">New Prescription Request</div>
+            <div class="form-group">
+                <label for="patientName">Patient Name</label>
+                <input type="text" id="patientName" placeholder="John Doe">
+            </div>
+            <div class="form-group">
+                <label for="medication">Medication</label>
+                <select id="medication">
+                    <option>Lipitor 20mg</option>
+                    <option>Metformin 500mg</option>
+                    <option>Lisinopril 10mg</option>
+                    <option>Atorvastatin 40mg</option>
+                    <option>Omeprazole 20mg</option>
+                    <option>Amlodipine 5mg</option>
+                    <option>Simvastatin 20mg</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="eligibleDate">Eligible Date</label>
+                <input type="datetime-local" id="eligibleDate">
+            </div>
+            <div class="form-group">
+                <label for="refills">Refills Remaining</label>
+                <input type="number" id="refills" min="0" max="12" value="3">
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-submit" onclick="submitNewRequest()">Submit & Process</button>
+                <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="confirm-modal" id="confirmModal" onclick="if(event.target === this) closeConfirmModal()">
+        <div class="confirm-content">
+            <div class="confirm-message" id="confirmMessage"></div>
+            <div class="confirm-buttons">
+                <button class="btn-confirm-yes" id="confirmYes">Yes</button>
+                <button class="btn-confirm-no" onclick="closeConfirmModal()">No</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Patient Portal -->
+        <div class="panel">
+            <div class="panel-header">
+                <span>👤 Patient Portal</span>
+                <button class="btn btn-new-request" onclick="openNewRequestModal()">+ New Request</button>
+            </div>
+            <div class="panel-content" id="patientPortal">
+                <div class="empty-state">No prescriptions to display</div>
+            </div>
+        </div>
+
+        <!-- Doctor Portal -->
+        <div class="panel">
+            <div class="panel-header">👨‍⚕️ Doctor Portal</div>
+            <div class="panel-content" id="doctorPortal">
+                <div class="empty-state">No approval requests</div>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="panel">
+            <div class="panel-header">⚙️ Control Panel</div>
+            <div class="panel-content">
+                <!-- Admin Actions at Top -->
+                <div class="admin-section">
+                    <div class="admin-buttons">
+                        <button class="btn btn-admin" onclick="generateLoad()">Generate 20 Rxs</button>
+                        <button class="btn btn-admin btn-reset" onclick="resetEverything()">Reset All</button>
+                    </div>
+                </div>
+
+                <!-- Endpoint Configurations -->
+                <div id="endpointConfigs"></div>
+
+                <!-- Logs -->
+                <div class="logs-section">
+                    <div class="logs-header">
+                        <h3>System Logs</h3>
+                        <button class="btn-clear-logs" onclick="clearLogs()">Clear</button>
+                    </div>
+                    <div class="logs-container" id="logsContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // SignalR connection
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl("/notificationHub")
+            .withAutomaticReconnect()
+            .build();
+
+        // State
+        let prescriptions = {};
+        let approvals = {};
+        let endpointConfigs = {};
+        let autoProcessMode = false;
+        let activeWorkflows = 0;
+        let failedWorkflows = {}; // Track which prescriptions failed and where
+        let workflowWarnings = {};
+        let isConnecting = false;
+        let workflowRetrying = {};
+
+        // Start connection
+        async function startConnection() {
+            if (isConnecting) {
+                console.log('Connection attempt already in progress');
+                return;
+            }
+    
+            isConnecting = true;
+    
+            try {
+                await connection.start();
+                console.log("SignalR Connected");
+                updateConnectionStatus();
+        
+                // Load initial data
+                await loadPrescriptions();
+                await loadApprovals();
+                await loadConfigs();
+            } catch (err) {
+                console.error(err);
+                document.getElementById('connectionStatus').textContent = 'Disconnected';
+                document.getElementById('connectionStatus').className = 'connection-status disconnected';
+                setTimeout(startConnection, 5000);
+            } finally {
+                isConnecting = false;
+            }
+        }
+
+        function updateConnectionStatus() {
+            const statusEl = document.getElementById('connectionStatus');
+            if (autoProcessMode) {
+                statusEl.textContent = '⚡ Auto-Process';
+                statusEl.className = 'connection-status auto-mode';
+            } else {
+                statusEl.textContent = '🔌 Manual Mode';
+                statusEl.className = 'connection-status connected';
+            }
+        }
+
+        function toggleAutoProcess() {
+            autoProcessMode = !autoProcessMode;
+            updateConnectionStatus();
+        }
+
+        function showStatusTooltip(event) {
+            const tooltip = document.getElementById('statusTooltip');
+            const mode = autoProcessMode ? 'Auto-Process' : 'Manual';
+            const workflowText = activeWorkflows > 0 ? `${activeWorkflows} active workflow(s)` : 'No active workflows';
+            
+            tooltip.innerHTML = `
+                <strong>Mode:</strong> ${mode}<br>
+                <strong>Status:</strong> Connected<br>
+                <strong>Workflows:</strong> ${workflowText}<br>
+                <em>Click to toggle mode</em>
+            `;
+            
+            tooltip.style.top = (event.clientY + 10) + 'px';
+            tooltip.style.left = (event.clientX - 100) + 'px';
+            tooltip.classList.add('show');
+        }
+
+        function hideStatusTooltip() {
+            document.getElementById('statusTooltip').classList.remove('show');
+        }
+
+        // SignalR event handlers
+        connection.on("ReceiveLog", (message) => {
+            const logsContainer = document.getElementById('logsContainer');
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            const timestamp = new Date().toLocaleTimeString();
+            logEntry.textContent = `[${timestamp}] ${message}`;
+            logsContainer.appendChild(logEntry);
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        });
+
+        connection.on("PrescriptionUpdated", (prescription) => {
+            prescriptions[prescription.id] = prescription;
+            renderPrescriptions();
+        });
+
+        connection.on("ApprovalRequestUpdated", (approval) => {
+            approvals[approval.id] = approval;
+            renderApprovals();
+        });
+
+        // Load data from API
+        async function loadPrescriptions() {
+            const response = await fetch('/api/prescriptions');
+            const data = await response.json();
+            prescriptions = {};
+            data.forEach(p => prescriptions[p.id] = p);
+            renderPrescriptions();
+        }
+
+        async function loadApprovals() {
+            const response = await fetch('/api/approvals');
+            const data = await response.json();
+            approvals = {};
+            data.forEach(a => approvals[a.id] = a);
+            renderApprovals();
+        }
+
+        async function loadConfigs() {
+            const response = await fetch('/api/config');
+            endpointConfigs = await response.json();
+            renderConfigs();
+        }
+
+        // Render prescriptions
+        function renderPrescriptions() {
+            const container = document.getElementById('patientPortal');
+            const prescriptionList = Object.values(prescriptions).sort((a, b) => 
+                new Date(b.requestedDate) - new Date(a.requestedDate)
+            );
+
+            if (prescriptionList.length === 0) {
+                container.innerHTML = '<div class="empty-state">No prescriptions to display</div>';
+                return;
+            }
+
+            // Helper to generate timeline
+            function generateTimeline(p) {
+                const steps = [
+                    { key: 'validate', name: 'Validate', statuses: ['Validating', 'Validated'] },
+                    { key: 'authorize', name: 'Authorize', statuses: ['Authorizing', 'Authorized'] },
+                    { key: 'adjudicate', name: 'Adjudicate', statuses: ['Adjudicating', 'Adjudicated'] },
+                    { key: 'approval', name: 'Approval', statuses: ['ApprovalNeeded', 'Approved', 'Denied'] },
+                    { key: 'submit', name: 'Submit', statuses: ['Submitting', 'Completed'] }
+                ];
+
+                let currentStepIndex = -1;
+                let failedStep = -1;
+                let isWaiting = p.status === 'Waiting';
+                let approvalSkipped = false;
+    
+                // Check if this workflow failed at a specific step
+                const workflowFailure = failedWorkflows[p.id];
+                if (workflowFailure) {
+                    failedStep = workflowFailure.step;
+                    currentStepIndex = workflowFailure.step;
+                }
+
+                // Determine current step and check if approval was skipped
+                if (!workflowFailure) {
+                    if (p.status === 'Pending') {
+                        currentStepIndex = -1;
+                    } else if (p.status === 'Waiting') {
+                        currentStepIndex = 0;
+                    } else if (p.status === 'Validating' || p.status === 'Validated') {
+                        currentStepIndex = 0;
+                    } else if (p.status === 'Authorizing' || p.status === 'Authorized') {
+                        currentStepIndex = 1;
+                    } else if (p.status === 'Adjudicating' || p.status === 'Adjudicated') {
+                        currentStepIndex = 2;
+                    } else if (p.status === 'ApprovalNeeded' || p.status === 'Approved' || p.status === 'Denied') {
+                        currentStepIndex = 3;
+                        if (p.status === 'Denied') {
+                            failedStep = 3;
+                        }
+                    } else if (p.status === 'Submitting' || p.status === 'Completed') {
+                        currentStepIndex = 4;
+                        // If we're at submit/completed and approval wasn't needed, mark it skipped
+                        if (p.refillsRemaining > 0) {
+                            approvalSkipped = true;
+                        }
+                    }
+                }
+
+                // Generate timeline HTML
+                let timelineHTML = '<div class="timeline">';
+                timelineHTML += '<div class="timeline-line"></div>';
+                timelineHTML += '<div class="timeline-steps">';
+
+                steps.forEach((step, index) => {
+                    let pipClass = 'timeline-pip';
+                    let icon = '';
+                    let label = '';
+                    let tooltip = step.name;
+
+                    // Check FAILED first, before checking completed
+                    if (index === failedStep) {
+                        // FAILED - check what kind of failure
+                        if (workflowFailure && index === workflowFailure.step) {
+                            // Infrastructure failure
+                            pipClass += ' infra-failed';
+                            icon = '💥';
+                            label = `<div class="timeline-label">Failed</div>`;
+                            tooltip = `${step.name} - Service failure (retry needed)`;
+                        } else {
+                            // Business logic failure (denial)
+                            pipClass += ' failed';
+                            icon = '✗';
+                            label = `<div class="timeline-label">Denied</div>`;
+                            tooltip = `${step.name} - Denied by doctor`;
+                        }
+                    } else if (approvalSkipped && index === 3) {
+                        // Approval step was skipped
+                        pipClass += ' skipped';
+                        icon = '⊘';
+                        tooltip = `${step.name} - Not required (refills available)`;
+                    } else if (index < currentStepIndex || (index === currentStepIndex && !(approvalSkipped && index === 3) && p.status.endsWith('ed') && failedStep !== index)) {
+                        // Completed
+                        pipClass += ' completed';
+                        icon = '✓';
+                        tooltip = `${step.name} - Completed`;
+                    } else if (index === currentStepIndex) {
+                        // Current step
+                        if (isWaiting && index === 0) {
+                            // Special case: waiting for eligibility at validate step
+                            pipClass += ' waiting';
+                            icon = '⏰';
+                            label = `<div class="timeline-label">Not Eligible Yet</div>`;
+                            const eligibleDate = new Date(p.eligibleDate);
+                            const waitMinutes = Math.round((eligibleDate - new Date()) / 60000);
+                            tooltip = `${step.name} - Waiting ${waitMinutes} min until eligible (${eligibleDate.toLocaleString()})`;
+                        } else if (p.status === 'ApprovalNeeded' && index === 3) {
+                            // Waiting for doctor approval
+                            pipClass += ' waiting';
+                            icon = '⏰';
+                            label = `<div class="timeline-label">Awaiting Doctor</div>`;
+                            tooltip = `${step.name} - Pending doctor approval`;
+                        } else if (failedStep === index) {
+                            // This shouldn't happen now since we check failedStep first, but keep as fallback
+                            pipClass += ' failed';
+                            icon = '✗';
+                            label = `<div class="timeline-label">Denied</div>`;
+                            tooltip = `${step.name} - Denied by doctor`;
+                        } else {
+                            pipClass += ' current';
+                            icon = '●';
+                            label = `<div class="timeline-label">${p.status}</div>`;
+                            tooltip = `${step.name} - In Progress`;                        }
+                    } else {
+                        // Future
+                        icon = '';
+                        tooltip = step.name;
+                    }
+
+                    timelineHTML += `
+                        <div class="timeline-step">
+                            ${label}
+                            <div class="${pipClass}">${icon}</div>
+                            <div class="timeline-tooltip">${tooltip}</div>
+                        </div>
+                    `;
+                });
+
+                timelineHTML += '</div></div>';
+                return timelineHTML;
+            }
+
+            container.innerHTML = prescriptionList.map(p => {
+                const eligibleDate = new Date(p.eligibleDate);
+                const now = new Date();
+                const isEligible = now >= eligibleDate;
+                const eligibleText = isEligible 
+                    ? `<span style="color: #28a745;">✅ Eligible now</span>` 
+                    : `<span style="color: #ff9800;">⏰ ${eligibleDate.toLocaleDateString()} ${eligibleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+    
+                return `
+                    <div class="prescription-card">
+                        ${p.copay ? `<div class="copay-badge">$${p.copay.toFixed(2)}</div>` : ''}
+                        <h3>${p.patientName}</h3>
+                        <div class="medication">${p.medication}</div>
+            
+                        <div class="info-row">
+                            <div class="detail">Patient ID: ${p.patientId}</div>
+                            <div class="detail-right">${eligibleText}</div>
+                        </div>
+            
+                        <div class="info-row">
+                            <div class="detail">Refills: ${p.refillsRemaining}</div>
+                            <div class="detail-right">Requested: ${new Date(p.requestedDate).toLocaleDateString()} ${new Date(p.requestedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                        </div>
+            
+                        ${generateTimeline(p)}
+                        ${workflowWarnings[p.id] ? `<div style="margin-top: 8px; padding: 6px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px; font-size: 11px; color: #856404;">⚠️ ${workflowWarnings[p.id]}</div>` : ''}
+                        ${p.status === 'Pending' ? `<div style="margin-top: 8px;"><button class="btn btn-approve" style="width: 100%; padding: 6px;" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button></div>` : ''}
+                        ${failedWorkflows[p.id] ? `<div style="margin-top: 8px;"><button class="btn btn-approve" style="width: 100%; padding: 6px; background: #ff9800;" onclick="processWorkflow('${p.id}')">🔄 Reprocess (Replay)</button></div>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Render approvals
+        function renderApprovals() {
+            const container = document.getElementById('doctorPortal');
+            const approvalList = Object.values(approvals)
+                .filter(a => !a.isApproved && !a.isDenied)
+                .sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+
+            if (approvalList.length === 0) {
+                container.innerHTML = '<div class="empty-state">No approval requests</div>';
+                return;
+            }
+
+            container.innerHTML = approvalList.map(a => `
+                <div class="approval-card">
+                    <h3>${a.patientName}</h3>
+                    <div class="medication">${a.medication}</div>
+                    <div class="timestamp">Requested: ${new Date(a.requestedAt).toLocaleString()}</div>
+                    ${a.reminderCount > 0 ? `<div class="timestamp">Reminders sent: ${a.reminderCount}</div>` : ''}
+                    <div class="approval-buttons">
+                        <button class="btn btn-approve" onclick="handleApproval('${a.id}', true)">✓ Approve</button>
+                        <button class="btn btn-deny" onclick="handleApproval('${a.id}', false)">✗ Deny</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Render endpoint configs
+        function renderConfigs() {
+            const container = document.getElementById('endpointConfigs');
+            const endpoints = [
+                { key: 'validate', name: 'Validate Eligibility' },
+                { key: 'authorize', name: 'Prior Authorization' },
+                { key: 'adjudicate', name: 'Adjudicate Claim' },
+                { key: 'notify', name: 'Notifications' },
+                { key: 'submit', name: 'Submit to Pharmacy' }
+            ];
+
+            container.innerHTML = endpoints.map(ep => {
+                const config = endpointConfigs[ep.key] || { failureRatePercent: 0, latencyMs: 0, completeOutage: false };
+                return `
+                    <div class="endpoint-config">
+                        <div class="endpoint-header">
+                            <h3>${ep.name}</h3>
+                            <label class="toggle-switch">
+                                <input type="checkbox" id="${ep.key}-outage" ${config.completeOutage ? 'checked' : ''}
+                                    onchange="updateConfig('${ep.key}', 'completeOutage', this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Failure Rate</label>
+                            <div class="slider-container">
+                                <input type="range" min="0" max="100" value="${config.failureRatePercent}" 
+                                    oninput="updateConfig('${ep.key}', 'failureRatePercent', this.value)">
+                                <span class="slider-value" id="${ep.key}-failure">${config.failureRatePercent}%</span>
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label class="control-label">Latency (ms)</label>
+                            <div class="slider-container">
+                                <input type="range" min="0" max="5000" step="100" value="${config.latencyMs}" 
+                                    oninput="updateConfig('${ep.key}', 'latencyMs', this.value)">
+                                <span class="slider-value" id="${ep.key}-latency">${config.latencyMs}ms</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Update endpoint configuration
+        async function updateConfig(endpoint, property, value) {
+            const config = endpointConfigs[endpoint];
+            
+            if (property === 'completeOutage') {
+                config[property] = value;
+            } else {
+                config[property] = parseInt(value);
+            }
+
+            // Update display
+            if (property === 'failureRatePercent') {
+                document.getElementById(`${endpoint}-failure`).textContent = `${value}%`;
+            } else if (property === 'latencyMs') {
+                document.getElementById(`${endpoint}-latency`).textContent = `${value}ms`;
+            }
+
+            // Send to server
+            await fetch(`/api/config/${endpoint}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+        }
+
+        // Handle approval
+        async function handleApproval(approvalId, approved) {
+            await fetch(`/api/approve/${approvalId}?approved=${approved}`, {
+                method: 'POST'
+            });
+    
+            // If approved, continue the workflow
+            if (approved) {
+                const approval = approvals[approvalId];
+                if (approval && approval.prescriptionId) {
+                    // Wait a moment for the state to update
+                    setTimeout(async () => {
+                        // Continue workflow from step 5 (submit)
+                        try {
+                            await fetch(`/api/submit/${approval.prescriptionId}`, { method: 'POST' });
+                            console.log('Workflow continued after approval');
+                        } catch (error) {
+                            console.error('Failed to continue workflow after approval:', error);
+                        }
+                    }, 500);
+                }
+            }
+        }
+
+        // Clear logs
+        function clearLogs() {
+            document.getElementById('logsContainer').innerHTML = '';
+        }
+
+        // Generate load
+        async function generateLoad() {
+            await fetch('/api/admin/generate-load', { method: 'POST' });
+        }
+
+        // Confirmation modal helpers
+        function showConfirm(message, onConfirm) {
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmYes').onclick = () => {
+                closeConfirmModal();
+                onConfirm();
+            };
+            document.getElementById('confirmModal').classList.add('show');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('show');
+        }
+
+        // Reset everything
+        async function resetEverything() {
+            showConfirm('This will reset all data and configurations. Continue?', async () => {
+                // Clear local state
+                prescriptions = {};
+                approvals = {};
+                failedWorkflows = {};
+                workflowWarnings = {};
+
+                // Reset configs
+                Object.keys(endpointConfigs).forEach(key => {
+                    endpointConfigs[key] = { failureRatePercent: 0, latencyMs: 0, completeOutage: false };
+                });
+
+                // Send reset configs to server
+                for (const endpoint of Object.keys(endpointConfigs)) {
+                    await fetch(`/api/config/${endpoint}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(endpointConfigs[endpoint])
+                    });
+                }
+
+                // Call server reset endpoint
+                await fetch('/api/admin/reset', { method: 'POST' });
+
+                // Clear logs
+                clearLogs();
+
+                // Reload fresh data
+                await loadPrescriptions();
+                await loadApprovals();
+        
+                // Re-render everything
+                renderConfigs();
+            });
+        }
+
+        // Modal functions
+        function openNewRequestModal() {
+            // Random names
+            const firstNames = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara", 
+                                "David", "Elizabeth", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen"];
+            const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
+                               "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"];
+            
+            const randomName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+            document.getElementById('patientName').value = randomName;
+            
+            // Random medication
+            const medications = document.getElementById('medication').options;
+            const randomMedIndex = Math.floor(Math.random() * medications.length);
+            document.getElementById('medication').selectedIndex = randomMedIndex;
+            
+            // Random refills (0-12)
+            document.getElementById('refills').value = Math.floor(Math.random() * 13);
+            
+            // Set default eligible date to now
+            const now = new Date();
+            now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+            document.getElementById('eligibleDate').value = now.toISOString().slice(0, 16);
+            
+            document.getElementById('newRequestModal').classList.add('show');
+        }
+
+        function closeModal() {
+            document.getElementById('newRequestModal').classList.remove('show');
+        }
+
+        async function submitNewRequest() {
+            const patientName = document.getElementById('patientName').value;
+            const medication = document.getElementById('medication').value;
+            const eligibleDate = document.getElementById('eligibleDate').value;
+            const refills = parseInt(document.getElementById('refills').value);
+
+            if (!patientName) {
+                alert('Please enter a patient name');
+                return;
+            }
+
+            // Create new prescription
+            const prescription = {
+                id: 'P' + Date.now(),
+                patientId: 'PAT' + Math.random().toString(36).substr(2, 9),
+                patientName: patientName,
+                medication: medication,
+                eligibleDate: new Date(eligibleDate).toISOString(),
+                refillsRemaining: refills,
+                status: 'Pending',
+                requestedDate: new Date().toISOString()
+            };
+
+            // Add to local state and render
+            prescriptions[prescription.id] = prescription;
+            renderPrescriptions();
+            
+            closeModal();
+            
+            // Auto-process if in auto mode, otherwise manual
+            if (autoProcessMode) {
+                await processWorkflow(prescription.id);
+            }
+        }
+
+        // Process workflow - calls all 5 steps in sequence
+        async function processWorkflow(prescriptionId) {
+            activeWorkflows++;
+            updateConnectionStatus();
+    
+            // Clear any previous failure state
+            delete failedWorkflows[prescriptionId];
+    
+            try {
+                // Step 1: Validate Eligibility
+                const validateResp = await fetch(`/api/validate/${prescriptionId}`, { method: 'POST' });
+                if (!validateResp.ok) {
+                    failedWorkflows[prescriptionId] = { step: 0, name: 'Validate' };
+                    throw new Error('Validation failed');
+                }
+                const validateResult = await validateResp.json();
+        
+                if (!validateResult.eligible) {
+                    console.log('Not eligible yet, waiting...');
+                    activeWorkflows--;
+                    updateConnectionStatus();
+                    return;
+                }
+        
+                // Step 2: Prior Authorization
+                const authorizeResp = await fetch(`/api/authorize/${prescriptionId}`, { method: 'POST' });
+                if (!authorizeResp.ok) {
+                    failedWorkflows[prescriptionId] = { step: 1, name: 'Authorize' };
+                    throw new Error('Authorization failed');
+                }
+        
+                // Step 3: Adjudicate Claim
+                const adjudicateResp = await fetch(`/api/adjudicate/${prescriptionId}`, { method: 'POST' });
+                if (!adjudicateResp.ok) {
+                    failedWorkflows[prescriptionId] = { step: 2, name: 'Adjudicate' };
+                    throw new Error('Adjudication failed');
+                }
+        
+                // Step 4: Check if approval needed
+                const approvalResp = await fetch(`/api/request-approval/${prescriptionId}`, { method: 'POST' });
+                if (!approvalResp.ok) {
+                    failedWorkflows[prescriptionId] = { step: 3, name: 'Approval' };
+                    throw new Error('Approval request failed');
+                }
+                const approvalResult = await approvalResp.json();
+        
+                if (approvalResult.approvalNeeded) {
+                    console.log('Waiting for doctor approval...');
+                    activeWorkflows--;
+                    updateConnectionStatus();
+                    return;
+                }
+        
+                // Step 5: Submit to Pharmacy
+                const submitResp = await fetch(`/api/submit/${prescriptionId}`, { method: 'POST' });
+                if (!submitResp.ok) {
+                    failedWorkflows[prescriptionId] = { step: 4, name: 'Submit' };
+                    throw new Error('Submission failed');
+                }
+        
+                console.log('Workflow completed successfully!');
+
+                // Check if notifications had issues
+                const notifyHasIssues = endpointConfigs['notify']?.completeOutage || 
+                                        endpointConfigs['notify']?.failureRatePercent > 0;
+
+                if (notifyHasIssues) {
+                    workflowWarnings[prescriptionId] = "Workflow completed but patient notifications may have failed";
+                    renderPrescriptions();
+                }
+
+                // Clear success - no failure
+                delete failedWorkflows[prescriptionId];            
+            } catch (error) {
+                console.error('Workflow failed:', error);
+                // Trigger re-render to show failure
+                renderPrescriptions();
+            } finally {
+                activeWorkflows--;
+                updateConnectionStatus();
+            }
+        }
+
+        // Auto-process waiting prescriptions every 30 seconds
+        setInterval(async () => {
+            const waitingPrescriptions = Object.values(prescriptions).filter(p => p.status === 'Waiting');
+    
+            for (const p of waitingPrescriptions) {
+                const eligibleDate = new Date(p.eligibleDate);
+                const now = new Date();
+        
+                if (now >= eligibleDate) {
+                    console.log(`Auto-processing ${p.patientName} - now eligible`);
+                    await processWorkflow(p.id);
+                }
+            }
+        }, 30000); // Check every 30 seconds
+
+        // Start the app
+        startConnection();
+    </script>
+</body>
+</html>
