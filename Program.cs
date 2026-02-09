@@ -1,5 +1,11 @@
 ﻿using Microsoft.AspNetCore.SignalR;
 using System.Collections.Concurrent;
+using Temporalio.Client;
+using Temporalio.Worker;
+using Temporalio.Extensions.Hosting;
+using PBMAdjudicationService.Workflows;
+using PBMAdjudicationService.Activities;
+using PBMAdjudicationService.Models;
 
 namespace PBMAdjudicationService
 {
@@ -64,6 +70,15 @@ namespace PBMAdjudicationService
                 new Prescription
                 {
                     PatientId = "P001",
+                    PatientName = "Michael Davis",
+                    Medication = "Omeprazole 20mg",
+                    EligibleDate = DateTime.UtcNow.AddMinutes(2),
+                    RefillsRemaining = 5,
+                    Status = "Pending"
+                },
+                new Prescription
+                {
+                    PatientId = "P002",
                     PatientName = "John Smith",
                     Medication = "Lipitor 20mg",
                     EligibleDate = DateTime.UtcNow.AddDays(-1),
@@ -72,16 +87,16 @@ namespace PBMAdjudicationService
                 },
                 new Prescription
                 {
-                    PatientId = "P002",
+                    PatientId = "P003",
                     PatientName = "Mary Johnson",
                     Medication = "Metformin 500mg",
-                    EligibleDate = DateTime.UtcNow.AddHours(2),
+                    EligibleDate = DateTime.UtcNow.AddHours(5),
                     RefillsRemaining = 2,
                     Status = "Pending"
                 },
                 new Prescription
                 {
-                    PatientId = "P003",
+                    PatientId = "P004",
                     PatientName = "Robert Williams",
                     Medication = "Lisinopril 10mg",
                     EligibleDate = DateTime.UtcNow.AddDays(-5),
@@ -90,22 +105,13 @@ namespace PBMAdjudicationService
                 },
                 new Prescription
                 {
-                    PatientId = "P004",
+                    PatientId = "P005",
                     PatientName = "Patricia Brown",
                     Medication = "Atorvastatin 40mg",
                     EligibleDate = DateTime.UtcNow.AddDays(-3),
                     RefillsRemaining = 1,
                     Status = "Pending"
                 },
-                new Prescription
-                {
-                    PatientId = "P005",
-                    PatientName = "Michael Davis",
-                    Medication = "Omeprazole 20mg",
-                    EligibleDate = DateTime.UtcNow.AddMinutes(30),
-                    RefillsRemaining = 5,
-                    Status = "Pending"
-                }
             };
 
             foreach (var rx in prescriptions)
@@ -197,6 +203,29 @@ namespace PBMAdjudicationService
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+            // Add HttpClientFactory for activities
+            builder.Services.AddHttpClient();
+            // Configure Temporal client and worker
+            builder.Services.AddSingleton<ITemporalClient>(sp =>
+            {
+                return TemporalClient.ConnectAsync(new("localhost:7233")).Result;
+            });
+
+            builder.Services.AddHostedService(sp =>
+            {
+                var client = sp.GetRequiredService<ITemporalClient>();
+                var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+                var configuration = sp.GetRequiredService<IConfiguration>();
+
+                var activities = new PrescriptionActivities(httpClientFactory, configuration);
+
+                return new TemporalWorkerService(
+                    client,
+                    new TemporalWorkerServiceOptions("prescription-task-queue")
+                        .AddWorkflow<PrescriptionWorkflow>()
+                        .AddAllActivities(activities)
+                );
+            });
 
             builder.Services.AddSignalR();
 
@@ -458,8 +487,12 @@ namespace PBMAdjudicationService
                 return Results.Ok();
             });
 
-            // Doctor approves/denies
-            app.MapPost("/api/approve/{approvalId}", async (string approvalId, bool approved, IHubContext<NotificationHub> hubContext) =>
+            // Doctor approves/denies - Temporal version
+            app.MapPost("/api/approve/{approvalId}", async (
+                string approvalId,
+                bool approved,
+                ITemporalClient client,
+                IHubContext<NotificationHub> hubContext) =>
             {
                 if (!DataStore.ApprovalRequests.TryGetValue(approvalId, out var approval))
                 {
@@ -471,34 +504,46 @@ namespace PBMAdjudicationService
                     return Results.NotFound();
                 }
 
-                if (approved)
+                // Send signal to Temporal workflow
+                var workflowId = $"prescription-{prescription.PatientId}-{approval.PrescriptionId}";
+                var handle = client.GetWorkflowHandle(workflowId);
+
+                try
                 {
-                    approval.IsApproved = true;
-                    prescription.Status = "Approved";
-                    prescription.RefillsRemaining = 3;
+                    if (approved)
+                    {
+                        await handle.SignalAsync((PrescriptionWorkflow wf) => wf.ApproveAsync());
+                        await hubContext.Clients.All.SendAsync("ReceiveLog",
+                            $"✅ [temporal] Doctor approved workflow for {prescription.PatientName}");
 
-                    await EndpointHelper.SendNotification("patient", prescription.PatientName,
-                        $"Good news! Your doctor approved your refill for {prescription.Medication}", hubContext);
+                        // Update local state
+                        approval.IsApproved = true;
+                        prescription.Status = "Approved";
+                        prescription.RefillsRemaining = 3;
+                    }
+                    else
+                    {
+                        await handle.SignalAsync((PrescriptionWorkflow wf) => wf.DenyAsync());
+                        await hubContext.Clients.All.SendAsync("ReceiveLog",
+                            $"❌ [temporal] Doctor denied workflow for {prescription.PatientName}");
 
-                    await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"✅ [approval] Doctor approved refill for {prescription.PatientName}");
+                        // Update local state
+                        approval.IsDenied = true;
+                        prescription.Status = "Denied";
+                    }
+
+                    await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                    await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
+
+                    return Results.Ok();
                 }
-                else
+                catch (Temporalio.Exceptions.RpcException ex) when (ex.Message.Contains("already completed"))
                 {
-                    approval.IsDenied = true;
-                    prescription.Status = "Denied";
-
-                    await EndpointHelper.SendNotification("patient", prescription.PatientName,
-                        $"Your refill request for {prescription.Medication} was denied. Please contact your doctor.", hubContext);
-
+                    // Workflow already completed (didn't need approval)
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"❌ [approval] Doctor denied refill for {prescription.PatientName}");
+                        $"⚠️ [temporal] Workflow already completed for {prescription.PatientName} - approval not needed");
+                    return Results.Ok();
                 }
-
-                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
-
-                return Results.Ok();
             });
 
             // STEP 5: Submit to Pharmacy
@@ -655,6 +700,42 @@ namespace PBMAdjudicationService
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"🔄 [admin] System reset - restored 5 default prescriptions");
                 return Results.Ok(new { reset = true });
+            });
+
+            // NEW: Start Temporal workflow
+            app.MapPost("/api/workflow/start/{prescriptionId}", async (
+                string prescriptionId,
+                ITemporalClient client,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
+                {
+                    return Results.NotFound();
+                }
+
+                var input = new PrescriptionInput
+                {
+                    PrescriptionId = prescriptionId,
+                    PatientName = prescription.PatientName,
+                    Medication = prescription.Medication,
+                    EligibleDate = prescription.EligibleDate,
+                    RefillsRemaining = prescription.RefillsRemaining
+                };
+
+                // Start the workflow
+                var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
+                await client.StartWorkflowAsync(
+                    (PrescriptionWorkflow wf) => wf.RunAsync(input),
+                    new WorkflowOptions
+                    {
+                        Id = workflowId,
+                        TaskQueue = "prescription-task-queue"
+                    });
+
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"🚀 [temporal] Started workflow for {prescription.PatientName}");
+
+                return Results.Ok(new { workflowId });
             });
 
             app.Run();

@@ -844,8 +844,6 @@
         let endpointConfigs = {};
         let autoProcessMode = false;
         let activeWorkflows = 0;
-        let failedWorkflows = {}; // Track which prescriptions failed and where
-        let workflowWarnings = {};
         let isConnecting = false;
         let workflowRetrying = {};
 
@@ -985,36 +983,27 @@
                 let isWaiting = p.status === 'Waiting';
                 let approvalSkipped = false;
     
-                // Check if this workflow failed at a specific step
-                const workflowFailure = failedWorkflows[p.id];
-                if (workflowFailure) {
-                    failedStep = workflowFailure.step;
-                    currentStepIndex = workflowFailure.step;
-                }
-
                 // Determine current step and check if approval was skipped
-                if (!workflowFailure) {
-                    if (p.status === 'Pending') {
-                        currentStepIndex = -1;
-                    } else if (p.status === 'Waiting') {
-                        currentStepIndex = 0;
-                    } else if (p.status === 'Validating' || p.status === 'Validated') {
-                        currentStepIndex = 0;
-                    } else if (p.status === 'Authorizing' || p.status === 'Authorized') {
-                        currentStepIndex = 1;
-                    } else if (p.status === 'Adjudicating' || p.status === 'Adjudicated') {
-                        currentStepIndex = 2;
-                    } else if (p.status === 'ApprovalNeeded' || p.status === 'Approved' || p.status === 'Denied') {
-                        currentStepIndex = 3;
-                        if (p.status === 'Denied') {
-                            failedStep = 3;
-                        }
-                    } else if (p.status === 'Submitting' || p.status === 'Completed') {
-                        currentStepIndex = 4;
-                        // If we're at submit/completed and approval wasn't needed, mark it skipped
-                        if (p.refillsRemaining > 0) {
-                            approvalSkipped = true;
-                        }
+                if (p.status === 'Pending') {
+                    currentStepIndex = -1;
+                } else if (p.status === 'Waiting') {
+                    currentStepIndex = 0;
+                } else if (p.status === 'Validating' || p.status === 'Validated') {
+                    currentStepIndex = 0;
+                } else if (p.status === 'Authorizing' || p.status === 'Authorized') {
+                    currentStepIndex = 1;
+                } else if (p.status === 'Adjudicating' || p.status === 'Adjudicated') {
+                    currentStepIndex = 2;
+                } else if (p.status === 'ApprovalNeeded' || p.status === 'Approved' || p.status === 'Denied') {
+                    currentStepIndex = 3;
+                    if (p.status === 'Denied') {
+                        failedStep = 3;
+                    }
+                } else if (p.status === 'Submitting' || p.status === 'Completed') {
+                    currentStepIndex = 4;
+                    // If we're at submit/completed and approval wasn't needed, mark it skipped
+                    if (p.refillsRemaining > 0) {
+                        approvalSkipped = true;
                     }
                 }
 
@@ -1031,20 +1020,11 @@
 
                     // Check FAILED first, before checking completed
                     if (index === failedStep) {
-                        // FAILED - check what kind of failure
-                        if (workflowFailure && index === workflowFailure.step) {
-                            // Infrastructure failure
-                            pipClass += ' infra-failed';
-                            icon = '💥';
-                            label = `<div class="timeline-label">Failed</div>`;
-                            tooltip = `${step.name} - Service failure (retry needed)`;
-                        } else {
-                            // Business logic failure (denial)
-                            pipClass += ' failed';
-                            icon = '✗';
-                            label = `<div class="timeline-label">Denied</div>`;
-                            tooltip = `${step.name} - Denied by doctor`;
-                        }
+                        // Business logic failure (denial)
+                        pipClass += ' failed';
+                        icon = '✗';
+                        label = `<div class="timeline-label">Denied</div>`;
+                        tooltip = `${step.name} - Denied by doctor`;
                     } else if (approvalSkipped && index === 3) {
                         // Approval step was skipped
                         pipClass += ' skipped';
@@ -1126,9 +1106,7 @@
                         </div>
             
                         ${generateTimeline(p)}
-                        ${workflowWarnings[p.id] ? `<div style="margin-top: 8px; padding: 6px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px; font-size: 11px; color: #856404;">⚠️ ${workflowWarnings[p.id]}</div>` : ''}
                         ${p.status === 'Pending' ? `<div style="margin-top: 8px;"><button class="btn btn-approve" style="width: 100%; padding: 6px;" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button></div>` : ''}
-                        ${failedWorkflows[p.id] ? `<div style="margin-top: 8px;"><button class="btn btn-approve" style="width: 100%; padding: 6px; background: #ff9800;" onclick="processWorkflow('${p.id}')">🔄 Reprocess (Replay)</button></div>` : ''}
                     </div>
                 `;
             }).join('');
@@ -1229,28 +1207,11 @@
             });
         }
 
-        // Handle approval
+        // Handle approval - now sends signal to Temporal workflow
         async function handleApproval(approvalId, approved) {
             await fetch(`/api/approve/${approvalId}?approved=${approved}`, {
                 method: 'POST'
             });
-    
-            // If approved, continue the workflow
-            if (approved) {
-                const approval = approvals[approvalId];
-                if (approval && approval.prescriptionId) {
-                    // Wait a moment for the state to update
-                    setTimeout(async () => {
-                        // Continue workflow from step 5 (submit)
-                        try {
-                            await fetch(`/api/submit/${approval.prescriptionId}`, { method: 'POST' });
-                            console.log('Workflow continued after approval');
-                        } catch (error) {
-                            console.error('Failed to continue workflow after approval:', error);
-                        }
-                    }, 500);
-                }
-            }
         }
 
         // Clear logs
@@ -1283,8 +1244,6 @@
                 // Clear local state
                 prescriptions = {};
                 approvals = {};
-                failedWorkflows = {};
-                workflowWarnings = {};
 
                 // Reset configs
                 Object.keys(endpointConfigs).forEach(key => {
@@ -1381,103 +1340,34 @@
             }
         }
 
-        // Process workflow - calls all 5 steps in sequence
+        // Process workflow using Temporal
         async function processWorkflow(prescriptionId) {
             activeWorkflows++;
             updateConnectionStatus();
     
-            // Clear any previous failure state
-            delete failedWorkflows[prescriptionId];
-    
             try {
-                // Step 1: Validate Eligibility
-                const validateResp = await fetch(`/api/validate/${prescriptionId}`, { method: 'POST' });
-                if (!validateResp.ok) {
-                    failedWorkflows[prescriptionId] = { step: 0, name: 'Validate' };
-                    throw new Error('Validation failed');
-                }
-                const validateResult = await validateResp.json();
+                // Start Temporal workflow
+                const response = await fetch(`/api/workflow/start/${prescriptionId}`, { 
+                    method: 'POST' 
+                });
         
-                if (!validateResult.eligible) {
-                    console.log('Not eligible yet, waiting...');
-                    activeWorkflows--;
-                    updateConnectionStatus();
-                    return;
+                if (!response.ok) {
+                    throw new Error('Failed to start workflow');
                 }
         
-                // Step 2: Prior Authorization
-                const authorizeResp = await fetch(`/api/authorize/${prescriptionId}`, { method: 'POST' });
-                if (!authorizeResp.ok) {
-                    failedWorkflows[prescriptionId] = { step: 1, name: 'Authorize' };
-                    throw new Error('Authorization failed');
-                }
+                const result = await response.json();
+                console.log('Temporal workflow started:', result.workflowId);
         
-                // Step 3: Adjudicate Claim
-                const adjudicateResp = await fetch(`/api/adjudicate/${prescriptionId}`, { method: 'POST' });
-                if (!adjudicateResp.ok) {
-                    failedWorkflows[prescriptionId] = { step: 2, name: 'Adjudicate' };
-                    throw new Error('Adjudication failed');
-                }
-        
-                // Step 4: Check if approval needed
-                const approvalResp = await fetch(`/api/request-approval/${prescriptionId}`, { method: 'POST' });
-                if (!approvalResp.ok) {
-                    failedWorkflows[prescriptionId] = { step: 3, name: 'Approval' };
-                    throw new Error('Approval request failed');
-                }
-                const approvalResult = await approvalResp.json();
-        
-                if (approvalResult.approvalNeeded) {
-                    console.log('Waiting for doctor approval...');
-                    activeWorkflows--;
-                    updateConnectionStatus();
-                    return;
-                }
-        
-                // Step 5: Submit to Pharmacy
-                const submitResp = await fetch(`/api/submit/${prescriptionId}`, { method: 'POST' });
-                if (!submitResp.ok) {
-                    failedWorkflows[prescriptionId] = { step: 4, name: 'Submit' };
-                    throw new Error('Submission failed');
-                }
-        
-                console.log('Workflow completed successfully!');
-
-                // Check if notifications had issues
-                const notifyHasIssues = endpointConfigs['notify']?.completeOutage || 
-                                        endpointConfigs['notify']?.failureRatePercent > 0;
-
-                if (notifyHasIssues) {
-                    workflowWarnings[prescriptionId] = "Workflow completed but patient notifications may have failed";
-                    renderPrescriptions();
-                }
-
-                // Clear success - no failure
-                delete failedWorkflows[prescriptionId];            
+                // Workflow runs asynchronously - updates come via SignalR
             } catch (error) {
-                console.error('Workflow failed:', error);
-                // Trigger re-render to show failure
+                console.error('Failed to start workflow:', error);
+                failedWorkflows[prescriptionId] = { step: 0, name: 'Start' };
                 renderPrescriptions();
             } finally {
                 activeWorkflows--;
                 updateConnectionStatus();
             }
         }
-
-        // Auto-process waiting prescriptions every 30 seconds
-        setInterval(async () => {
-            const waitingPrescriptions = Object.values(prescriptions).filter(p => p.status === 'Waiting');
-    
-            for (const p of waitingPrescriptions) {
-                const eligibleDate = new Date(p.eligibleDate);
-                const now = new Date();
-        
-                if (now >= eligibleDate) {
-                    console.log(`Auto-processing ${p.patientName} - now eligible`);
-                    await processWorkflow(p.id);
-                }
-            }
-        }, 30000); // Check every 30 seconds
 
         // Start the app
         startConnection();
