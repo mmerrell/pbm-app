@@ -1,197 +1,7 @@
 ﻿using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
 
 namespace PBMAdjudicationService
 {
-    // ============================================================================
-    // DATA MODELS
-    // ============================================================================
-
-    public class Prescription
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string PatientId { get; set; } = "";
-        public string PatientName { get; set; } = "";
-        public string Medication { get; set; } = "";
-        public DateTime EligibleDate { get; set; }
-        public int RefillsRemaining { get; set; }
-        public string Status { get; set; } = "Pending";
-        public decimal? Copay { get; set; }
-        public DateTime RequestedDate { get; set; } = DateTime.UtcNow;
-    }
-
-    public class DoctorApprovalRequest
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string PrescriptionId { get; set; } = "";
-        public string PatientName { get; set; } = "";
-        public string Medication { get; set; } = "";
-        public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
-        public int ReminderCount { get; set; } = 0;
-        public bool IsApproved { get; set; } = false;
-        public bool IsDenied { get; set; } = false;
-    }
-
-    public class EndpointConfig
-    {
-        public int FailureRatePercent { get; set; } = 0;
-        public int LatencyMs { get; set; } = 0;
-        public bool CompleteOutage { get; set; } = false;
-    }
-
-    // ============================================================================
-    // IN-MEMORY DATA STORAGE
-    // ============================================================================
-
-    public static class DataStore
-    {
-        public static ConcurrentDictionary<string, Prescription> Prescriptions { get; } = new();
-        public static ConcurrentDictionary<string, DoctorApprovalRequest> ApprovalRequests { get; } = new();
-
-        public static Dictionary<string, EndpointConfig> EndpointConfigs { get; } = new()
-        {
-            ["validate"] = new EndpointConfig(),
-            ["authorize"] = new EndpointConfig(),
-            ["adjudicate"] = new EndpointConfig(),
-            ["notify"] = new EndpointConfig(),
-            ["submit"] = new EndpointConfig()
-        };
-
-        static DataStore()
-        {
-            var prescriptions = new[]
-            {
-                new Prescription
-                {
-                    PatientId = "P001",
-                    PatientName = "Michael Davis",
-                    Medication = "Omeprazole 20mg",
-                    EligibleDate = DateTime.UtcNow.AddMinutes(2),
-                    RefillsRemaining = 5,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P002",
-                    PatientName = "John Smith",
-                    Medication = "Lipitor 20mg",
-                    EligibleDate = DateTime.UtcNow.AddDays(-1),
-                    RefillsRemaining = 3,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P003",
-                    PatientName = "Mary Johnson",
-                    Medication = "Metformin 500mg",
-                    EligibleDate = DateTime.UtcNow.AddMinutes(20),
-                    RefillsRemaining = 2,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P004",
-                    PatientName = "Robert Williams",
-                    Medication = "Lisinopril 10mg",
-                    EligibleDate = DateTime.UtcNow.AddDays(-5),
-                    RefillsRemaining = 0,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P005",
-                    PatientName = "Patricia Brown",
-                    Medication = "Atorvastatin 40mg",
-                    EligibleDate = DateTime.UtcNow.AddDays(-3),
-                    RefillsRemaining = 1,
-                    Status = "Pending"
-                },
-            };
-
-            foreach (var rx in prescriptions)
-            {
-                Prescriptions[rx.Id] = rx;
-            }
-        }
-    }
-
-    // ============================================================================
-    // SIGNALR HUB
-    // ============================================================================
-
-    public class NotificationHub : Hub
-    {
-        public async Task SendLog(string message)
-        {
-            await Clients.All.SendAsync("ReceiveLog", message);
-        }
-
-        public async Task UpdatePrescription(Prescription prescription)
-        {
-            await Clients.All.SendAsync("PrescriptionUpdated", prescription);
-        }
-
-        public async Task UpdateApprovalRequest(DoctorApprovalRequest request)
-        {
-            await Clients.All.SendAsync("ApprovalRequestUpdated", request);
-        }
-    }
-
-    // ============================================================================
-    // HELPER CLASS
-    // ============================================================================
-
-    public static class EndpointHelper
-    {
-        public static async Task<bool> SimulateEndpointBehavior(string endpointName, IHubContext<NotificationHub> hubContext)
-        {
-            var config = DataStore.EndpointConfigs[endpointName];
-
-            if (config.CompleteOutage)
-            {
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"❌ [{endpointName}] Complete outage - service unavailable");
-                throw new Exception($"{endpointName} service is down");
-            }
-
-            if (config.LatencyMs > 0)
-            {
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"⏱️ [{endpointName}] Simulating {config.LatencyMs}ms latency");
-                await Task.Delay(config.LatencyMs);
-            }
-
-            if (config.FailureRatePercent > 0)
-            {
-                var random = Random.Shared.Next(100);
-                if (random < config.FailureRatePercent)
-                {
-                    await hubContext.Clients.All.SendAsync("ReceiveLog", $"❌ [{endpointName}] Random failure ({config.FailureRatePercent}% rate)");
-                    throw new Exception($"{endpointName} failed randomly");
-                }
-            }
-
-            return true;
-        }
-
-        public static async Task SendNotification(string recipient, string recipientName, string message, IHubContext<NotificationHub> hubContext)
-        {
-            try
-            {
-                await SimulateEndpointBehavior("notify", hubContext);
-                await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"📧 [notify] Sent to {recipient} ({recipientName}): {message}");
-            }
-            catch (Exception ex)
-            {
-                await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"❌ [notify] Failed to send notification: {ex.Message}");
-            }
-        }
-    }
-
-    // ============================================================================
-    // MAIN PROGRAM
-    // ============================================================================
-
     public class Program
     {
         public static void Main(string[] args)
@@ -411,6 +221,7 @@ namespace PBMAdjudicationService
 
                 if (prescription.RefillsRemaining > 0)
                 {
+                    prescription.ApprovalNeededReason = null;
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"✅ [approval] Refills available ({prescription.RefillsRemaining} remaining), no approval needed");
                     return Results.Ok(new { approvalNeeded = false });
@@ -423,6 +234,8 @@ namespace PBMAdjudicationService
                     Medication = prescription.Medication
                 };
 
+                // Approval needed
+                prescription.ApprovalNeededReason = "NO_REFILLS";
                 DataStore.ApprovalRequests[approvalRequest.Id] = approvalRequest;
 
                 prescription.Status = "ApprovalNeeded";
