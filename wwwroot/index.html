@@ -52,6 +52,7 @@
             flex: 1;
             overflow-y: auto;
             padding: 20px;
+            padding-bottom: 80px
         }
 
         .prescription-card {
@@ -114,6 +115,21 @@
             color: #666;
             font-size: 12px;
             text-align: right;
+        }
+
+        .prescription-card.status-completed {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+
+        .prescription-card.status-denied {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+
+        .prescription-card.status-failed {
+            border-left-color: #ff9800;
+            background: #fde8c8;
         }
 
         /* Timeline Styles */
@@ -939,9 +955,18 @@
             }
         }
 
-        function toggleAutoProcess() {
+        async function toggleAutoProcess() {
             autoProcessMode = !autoProcessMode;
             updateConnectionStatus();
+
+            if (autoProcessMode) {
+                const toProcess = Object.values(prescriptions).filter(p => 
+                    p.status === 'Pending'
+                );
+                for (const p of toProcess) {
+                    await processWorkflow(p.id);
+                }
+            }
         }
 
         function showStatusTooltip(event) {
@@ -1011,7 +1036,7 @@
 
         // Render prescriptions
         function renderPrescriptions() {
-            const container = document.getElementById('patientPortal');
+            console.log('Prescription statuses:', Object.values(prescriptions).map(p => `${p.patientName}: ${p.status}`));            const container = document.getElementById('patientPortal');
             const prescriptionList = Object.values(prescriptions).sort((a, b) => 
                 new Date(b.requestedDate) - new Date(a.requestedDate)
             );
@@ -1055,9 +1080,12 @@
                 } else if (p.status === 'Submitting' || p.status === 'Completed') {
                     currentStepIndex = 4;
                     // If we're at submit/completed and approval wasn't needed, mark it skipped
-                    if (p.refillsRemaining > 0) {
+                    if (!p.approvalNeededReason) {
                         approvalSkipped = true;
                     }
+                } else if (p.status === 'OnHold') {
+                    currentStepIndex = p.failedStep ?? -1;
+                    failedStep = p.failedStep ?? -1; 
                 }
 
                 // Generate timeline HTML
@@ -1089,8 +1117,7 @@
                         pipClass += ' skipped';
                         icon = '⊘';
                         tooltip = `${step.name} - Not required (refills available)`;
-                    } else if (index < currentStepIndex || (index === currentStepIndex && !(approvalSkipped && index === 3) && p.status.endsWith('ed') && failedStep !== index)) {
-                        // Completed
+                    } else if (index < currentStepIndex || (index === currentStepIndex && !(approvalSkipped && index === 3) && p.status.endsWith('ed') && p.status !== 'ApprovalNeeded' && failedStep !== index)) {                        // Completed
                         pipClass += ' completed';
                         icon = '✓';
                         tooltip = `${step.name} - Completed`;
@@ -1118,7 +1145,7 @@
                             tooltip = `${step.name} - Denied by doctor`;
                         } else {
                             pipClass += ' current';
-                            icon = '●';
+                            icon = '';
                             label = `<div class="timeline-label">${p.status}</div>`;
                             tooltip = `${step.name} - In Progress`;                        }
                     } else {
@@ -1149,7 +1176,11 @@
                     : `<span style="color: #ff9800;">⏰ ${eligibleDate.toLocaleDateString()} ${eligibleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
     
                 return `
-                    <div class="prescription-card ${p.status === 'Completed' ? 'completed' : (p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'failed' : '')}">
+                        <div class="prescription-card ${
+                            p.status === 'Completed' ? 'status-completed' :
+                            p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'status-denied' :
+                            p.status === 'OnHold' ? 'status-failed' : ''
+                        }">
                         ${p.copay ? `<div class="copay-badge">$${p.copay.toFixed(2)}</div>` : ''}
                         <h3>${p.patientName}</h3>
                         <div class="medication">${p.medication}</div>
@@ -1166,6 +1197,14 @@
             
                         ${generateTimeline(p)}
                         ${p.status === 'Pending' ? `<div style="margin-top: 8px;"><button class="btn btn-approve" style="width: 100%; padding: 6px;" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button></div>` : ''}
+
+                        ${p.notificationStatus === 'Retrying' ? 
+                            `<div style="margin-top: 8px; padding: 6px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px; font-size: 11px; color: #856404;">⚠️ Patient notification retrying...</div>` 
+                            : p.notificationStatus === 'Failed' ? 
+                            `<div style="margin-top: 8px; padding: 6px; background: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px; font-size: 11px; color: #721c24;">❌ Patient notification failed permanently</div>`
+                            : p.notificationStatus === 'Sent' ? 
+                            `<div style="margin-top: 8px; padding: 6px; background: #d4edda; border-left: 3px solid #28a745; border-radius: 4px; font-size: 11px; color: #155724;">✅ Patient notified successfully</div>`
+                            : ''}
                     </div>
                 `;
             }).join('');
@@ -1313,6 +1352,9 @@
         async function resetEverything() {
             showConfirm('This will reset all data and configurations. Continue?', async () => {
                 // Clear local state
+                autoProcessMode = false;
+                updateConnectionStatus();
+
                 prescriptions = {};
                 approvals = {};
 

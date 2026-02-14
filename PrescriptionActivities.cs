@@ -1,7 +1,6 @@
 ﻿using Temporalio.Activities;
-using PBMAdjudicationService.Models;
 
-namespace PBMAdjudicationService.Activities
+namespace PBMAdjudicationService
 {
     public class PrescriptionActivities
     {
@@ -11,7 +10,7 @@ namespace PBMAdjudicationService.Activities
         public PrescriptionActivities(IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _httpClientFactory = httpClientFactory;
-            _baseUrl = configuration["BaseUrl"] ?? "http://localhost:5188";
+            _baseUrl = configuration["BaseUrl"] ?? "http://localhost:5002";
         }
 
         [Activity]
@@ -101,6 +100,20 @@ namespace PBMAdjudicationService.Activities
         }
 
         [Activity]
+        public async Task SendNotificationAsync(string prescriptionId, string recipient, string recipientName, string message)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync(
+                $"{_baseUrl}/api/notify/{prescriptionId}?recipient={recipient}&recipientName={Uri.EscapeDataString(recipientName)}&message={Uri.EscapeDataString(message)}",
+                null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ApplicationException($"Notification failed: {response.StatusCode}");
+            }
+        }
+
+        [Activity]
         public async Task<SubmissionResult> SubmitToPharmacyAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
@@ -134,15 +147,22 @@ namespace PBMAdjudicationService.Activities
         }
 
         [Activity]
-        public async Task MarkOnHoldAsync(string prescriptionId)
+        public async Task MarkOnHoldAsync(string prescriptionId, int failedStep)
         {
             var client = _httpClientFactory.CreateClient();
-            var response = await client.PostAsync($"{_baseUrl}/api/on-hold/{prescriptionId}", null);
+            var response = await client.PostAsync($"{_baseUrl}/api/on-hold/{prescriptionId}?failedStep={failedStep}", null);
 
             if (!response.IsSuccessStatusCode)
             {
                 throw new ApplicationException($"Failed to mark on hold: {response.StatusCode}");
             }
+        }
+
+        [Activity]
+        public async Task MarkNotificationFailedAsync(string prescriptionId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            await client.PostAsync($"{_baseUrl}/api/notify-failed/{prescriptionId}", null);
         }
     }
 }

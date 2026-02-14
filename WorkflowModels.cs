@@ -1,4 +1,4 @@
-namespace PBMAdjudicationService.Models
+namespace PBMAdjudicationService
 {
     public class PrescriptionInput
     {

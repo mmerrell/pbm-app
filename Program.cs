@@ -1,203 +1,9 @@
-﻿using Microsoft.AspNetCore.SignalR;
-using System.Collections.Concurrent;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Temporalio.Client;
-using Temporalio.Worker;
-using Temporalio.Extensions.Hosting;
-using PBMAdjudicationService.Workflows;
-using PBMAdjudicationService.Activities;
-using PBMAdjudicationService.Models;
 
 namespace PBMAdjudicationService
 {
-    // ============================================================================
-    // DATA MODELS
-    // ============================================================================
-
-    public class Prescription
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string PatientId { get; set; } = "";
-        public string PatientName { get; set; } = "";
-        public string Medication { get; set; } = "";
-        public DateTime EligibleDate { get; set; }
-        public int RefillsRemaining { get; set; }
-        public string Status { get; set; } = "Pending";
-        public decimal? Copay { get; set; }
-        public DateTime RequestedDate { get; set; } = DateTime.UtcNow;
-    }
-
-    public class DoctorApprovalRequest
-    {
-        public string Id { get; set; } = Guid.NewGuid().ToString();
-        public string PrescriptionId { get; set; } = "";
-        public string PatientName { get; set; } = "";
-        public string Medication { get; set; } = "";
-        public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
-        public int ReminderCount { get; set; } = 0;
-        public bool IsApproved { get; set; } = false;
-        public bool IsDenied { get; set; } = false;
-    }
-
-    public class EndpointConfig
-    {
-        public int FailureRatePercent { get; set; } = 0;
-        public int LatencyMs { get; set; } = 0;
-        public bool CompleteOutage { get; set; } = false;
-    }
-
-    // ============================================================================
-    // IN-MEMORY DATA STORAGE
-    // ============================================================================
-
-    public static class DataStore
-    {
-        public static ConcurrentDictionary<string, Prescription> Prescriptions { get; } = new();
-        public static ConcurrentDictionary<string, DoctorApprovalRequest> ApprovalRequests { get; } = new();
-
-        public static Dictionary<string, EndpointConfig> EndpointConfigs { get; } = new()
-        {
-            ["validate"] = new EndpointConfig(),
-            ["authorize"] = new EndpointConfig(),
-            ["adjudicate"] = new EndpointConfig(),
-            ["notify"] = new EndpointConfig(),
-            ["submit"] = new EndpointConfig()
-        };
-
-        static DataStore()
-        {
-            var prescriptions = new[]
-            {
-                new Prescription
-                {
-                    PatientId = "P001",
-                    PatientName = "Michael Davis",
-                    Medication = "Omeprazole 20mg",
-                    EligibleDate = DateTime.UtcNow.AddMinutes(2),
-                    RefillsRemaining = 5,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P002",
-                    PatientName = "John Smith",
-                    Medication = "Lipitor 20mg",
-                    EligibleDate = DateTime.UtcNow.AddDays(-1),
-                    RefillsRemaining = 3,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P003",
-                    PatientName = "Mary Johnson",
-                    Medication = "Metformin 500mg",
-                    EligibleDate = DateTime.UtcNow.AddMinutes(20),
-                    RefillsRemaining = 2,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P004",
-                    PatientName = "Robert Williams",
-                    Medication = "Lisinopril 10mg",
-                    EligibleDate = DateTime.UtcNow.AddDays(-5),
-                    RefillsRemaining = 0,
-                    Status = "Pending"
-                },
-                new Prescription
-                {
-                    PatientId = "P005",
-                    PatientName = "Patricia Brown",
-                    Medication = "Atorvastatin 40mg",
-                    EligibleDate = DateTime.UtcNow.AddDays(-3),
-                    RefillsRemaining = 1,
-                    Status = "Pending"
-                },
-            };
-
-            foreach (var rx in prescriptions)
-            {
-                Prescriptions[rx.Id] = rx;
-            }
-        }
-    }
-
-    // ============================================================================
-    // SIGNALR HUB
-    // ============================================================================
-
-    public class NotificationHub : Hub
-    {
-        public async Task SendLog(string message)
-        {
-            await Clients.All.SendAsync("ReceiveLog", message);
-        }
-
-        public async Task UpdatePrescription(Prescription prescription)
-        {
-            await Clients.All.SendAsync("PrescriptionUpdated", prescription);
-        }
-
-        public async Task UpdateApprovalRequest(DoctorApprovalRequest request)
-        {
-            await Clients.All.SendAsync("ApprovalRequestUpdated", request);
-        }
-    }
-
-    // ============================================================================
-    // HELPER CLASS
-    // ============================================================================
-
-    public static class EndpointHelper
-    {
-        public static async Task<bool> SimulateEndpointBehavior(string endpointName, IHubContext<NotificationHub> hubContext)
-        {
-            var config = DataStore.EndpointConfigs[endpointName];
-
-            if (config.CompleteOutage)
-            {
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"❌ [{endpointName}] Complete outage - service unavailable");
-                throw new Exception($"{endpointName} service is down");
-            }
-
-            if (config.LatencyMs > 0)
-            {
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"⏱️ [{endpointName}] Simulating {config.LatencyMs}ms latency");
-                await Task.Delay(config.LatencyMs);
-            }
-
-            if (config.FailureRatePercent > 0)
-            {
-                var random = Random.Shared.Next(100);
-                if (random < config.FailureRatePercent)
-                {
-                    await hubContext.Clients.All.SendAsync("ReceiveLog", $"❌ [{endpointName}] Random failure ({config.FailureRatePercent}% rate)");
-                    throw new Exception($"{endpointName} failed randomly");
-                }
-            }
-
-            return true;
-        }
-
-        public static async Task SendNotification(string recipient, string recipientName, string message, IHubContext<NotificationHub> hubContext)
-        {
-            try
-            {
-                await SimulateEndpointBehavior("notify", hubContext);
-                await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"📧 [notify] Sent to {recipient} ({recipientName}): {message}");
-            }
-            catch (Exception ex)
-            {
-                await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"❌ [notify] Failed to send notification: {ex.Message}");
-            }
-        }
-    }
-
-    // ============================================================================
-    // MAIN PROGRAM
-    // ============================================================================
-
     public class Program
     {
         public static void Main(string[] args)
@@ -205,30 +11,12 @@ namespace PBMAdjudicationService
             var builder = WebApplication.CreateBuilder(args);
             // Add HttpClientFactory for activities
             builder.Services.AddHttpClient();
-            // Configure Temporal client and worker
             builder.Services.AddSingleton<ITemporalClient>(sp =>
             {
                 return TemporalClient.ConnectAsync(new("localhost:7233")).Result;
             });
 
-            builder.Services.AddHostedService(sp =>
-            {
-                var client = sp.GetRequiredService<ITemporalClient>();
-                var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-                var configuration = sp.GetRequiredService<IConfiguration>();
-
-                var activities = new PrescriptionActivities(httpClientFactory, configuration);
-
-                return new TemporalWorkerService(
-                    client,
-                    new TemporalWorkerServiceOptions("prescription-task-queue")
-                        .AddWorkflow<PrescriptionWorkflow>()
-                        .AddAllActivities(activities)
-                );
-            });
-
             builder.Services.AddSignalR();
-
             builder.Services.AddCors(options =>
             {
                 options.AddDefaultPolicy(builder =>
@@ -344,8 +132,6 @@ namespace PBMAdjudicationService
             // STEP 3: Adjudicate Claim
             app.MapPost("/api/adjudicate/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
-                await EndpointHelper.SimulateEndpointBehavior("adjudicate", hubContext);
-
                 if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
                 {
                     return Results.NotFound();
@@ -354,7 +140,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Adjudicating";
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating copay for {prescription.Medication}");
-
+                await EndpointHelper.SimulateEndpointBehavior("adjudicate", hubContext);
                 await Task.Delay(100);
                 prescription.Copay = Random.Shared.Next(5, 50);
 
@@ -366,7 +152,6 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { copay = prescription.Copay });
             });
 
-            // STEP 4: Request Doctor Approval (if needed)
             app.MapPost("/api/request-approval/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
                 if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
@@ -376,10 +161,15 @@ namespace PBMAdjudicationService
 
                 if (prescription.RefillsRemaining > 0)
                 {
+                    prescription.ApprovalNeededReason = null;
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"✅ [approval] Refills available ({prescription.RefillsRemaining} remaining), no approval needed");
                     return Results.Ok(new { approvalNeeded = false });
                 }
+
+                prescription.ApprovalNeededReason = "NO_REFILLS";
+                prescription.Status = "ApprovalNeeded";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
 
                 var approvalRequest = new DoctorApprovalRequest
                 {
@@ -387,21 +177,14 @@ namespace PBMAdjudicationService
                     PatientName = prescription.PatientName,
                     Medication = prescription.Medication
                 };
-
                 DataStore.ApprovalRequests[approvalRequest.Id] = approvalRequest;
-
-                prescription.Status = "ApprovalNeeded";
-                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approvalRequest);
-
                 await EndpointHelper.SendNotification("patient", prescription.PatientName,
                     $"Your refill request for {prescription.Medication} is waiting for doctor approval.", hubContext);
                 await EndpointHelper.SendNotification("doctor", "Dr. Smith",
                     $"Please approve refill for {prescription.PatientName}: {prescription.Medication}", hubContext);
-
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"📋 [approval] Doctor approval requested for {prescription.PatientName}");
-
                 return Results.Ok(new { approvalNeeded = true, approvalId = approvalRequest.Id });
             });
 
@@ -427,7 +210,7 @@ namespace PBMAdjudicationService
             app.MapPost("/api/approve/{approvalId}", async (
                 string approvalId,
                 bool approved,
-                ITemporalClient client,
+                [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 if (!DataStore.ApprovalRequests.TryGetValue(approvalId, out var approval))
@@ -472,10 +255,47 @@ namespace PBMAdjudicationService
                 return Results.Ok();
             });
 
+            app.MapPost("/api/notify/{prescriptionId}", async (
+                string prescriptionId,
+                string recipient,
+                string recipientName,
+                string message,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
+                {
+                    return Results.NotFound();
+                }
+
+                // Mark as retrying before attempting
+                prescription.NotificationStatus = "Retrying";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+
+                await EndpointHelper.SimulateEndpointBehavior("notify", hubContext);
+
+                // Success
+                prescription.NotificationStatus = "Sent";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await EndpointHelper.SendNotification(recipient, recipientName, message, hubContext);
+                return Results.Ok();
+            });
+
+            app.MapPost("/api/notify-failed/{prescriptionId}", async (
+                string prescriptionId,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
+                {
+                    return Results.NotFound();
+                }
+                prescription.NotificationStatus = "Failed";
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                return Results.Ok();
+            });
+
             // STEP 5: Submit to Pharmacy
             app.MapPost("/api/submit/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
             {
-                await EndpointHelper.SimulateEndpointBehavior("submit", hubContext);
 
                 if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
                 {
@@ -485,6 +305,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Submitting";
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to pharmacy for {prescription.PatientName}");
+                await EndpointHelper.SimulateEndpointBehavior("submit", hubContext);
 
                 await Task.Delay(100);
 
@@ -610,7 +431,7 @@ namespace PBMAdjudicationService
             // NEW: Start Temporal workflow
             app.MapPost("/api/workflow/start/{prescriptionId}", async (
                 string prescriptionId,
-                ITemporalClient client,
+                [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
