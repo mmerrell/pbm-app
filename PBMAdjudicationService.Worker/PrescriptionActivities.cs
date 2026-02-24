@@ -1,6 +1,8 @@
-﻿using Temporalio.Activities;
+using Temporalio.Activities;
+using PBMAdjudication.Core;
+using Microsoft.Extensions.Configuration;
 
-namespace PBMAdjudicationService
+namespace PBMAdjudication.Worker
 {
     public class PrescriptionActivities
     {

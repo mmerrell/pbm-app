@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.SignalR;
+using PBMAdjudication.Core;
+using Microsoft.AspNetCore.SignalR;
 
 namespace PBMAdjudicationService
 {
@@ -54,3 +55,4 @@ namespace PBMAdjudicationService
     }
 
 }
+

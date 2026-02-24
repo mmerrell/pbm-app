@@ -1,8 +1,9 @@
-﻿using Temporalio.Api.Update.V1;
+using Temporalio.Api.Update.V1;
 using Temporalio.Common;
 using Temporalio.Workflows;
+using PBMAdjudication.Core;
 
-namespace PBMAdjudicationService
+namespace PBMAdjudication.Worker
 {
     [Workflow]
     public class PrescriptionWorkflow

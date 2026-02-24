@@ -1,6 +1,6 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 
-namespace PBMAdjudicationService
+namespace PBMAdjudication.Core
 {
     // ============================================================================
     // IN-MEMORY DATA STORAGE

@@ -1,4 +1,4 @@
-﻿namespace PBMAdjudicationService
+namespace PBMAdjudication.Core
 {
     // ============================================================================
     // DATA MODELS

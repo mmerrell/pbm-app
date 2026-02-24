@@ -6,13 +6,21 @@
 		<StartupObject>PBMAdjudicationService.Program</StartupObject>
 	</PropertyGroup>
 	<ItemGroup>
-		<Compile Remove="PBMAdjudicationService.Worker\**" />
+		<Compile Remove="PBMAdjudication.Core\**" />
+        <Content Remove="PBMAdjudication.Core\**" />
+        <EmbeddedResource Remove="PBMAdjudication.Core\**" />
+        <None Remove="PBMAdjudication.Core\**" />
+        <Compile Remove="PBMAdjudicationService.Worker\**" />
 		<Content Remove="PBMAdjudicationService.Worker\**" />
 		<EmbeddedResource Remove="PBMAdjudicationService.Worker\**" />
 		<None Remove="PBMAdjudicationService.Worker\**" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="Temporalio" Version="1.10.0" />
-		<PackageReference Include="Temporalio.Extensions.Hosting" Version="1.10.0" />
+		<PackageReference Include="Temporalio" Version="1.11.0" />
+		<PackageReference Include="Temporalio.Extensions.Hosting" Version="1.11.0" />
+	</ItemGroup>
+	<ItemGroup>
+	  <ProjectReference Include="PBMAdjudication.Core\PBMAdjudication.Core.csproj" />
+	  <ProjectReference Include="PBMAdjudicationService.Worker\PBMAdjudicationService.Worker.csproj" />
 	</ItemGroup>
 </Project>
