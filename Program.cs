@@ -8,28 +8,41 @@ namespace PBMAdjudicationService
 {
     public class Program
     {
-        public static void Main(string[] args)
+        public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-            // Add HttpClientFactory for activities
+
+            var connectionString = builder.Configuration.GetConnectionString("Postgres")
+                ?? throw new InvalidOperationException("Postgres connection string not found");
+
             builder.Services.AddHttpClient();
             builder.Services.AddSingleton<ITemporalClient>(sp =>
             {
                 return TemporalClient.ConnectAsync(new("localhost:7233")).Result;
             });
 
+            builder.Services.AddSingleton<IPrescriptionRepository>(
+                new PostgresPrescriptionRepository(connectionString));
+
+            builder.Services.AddScoped<EndpointHelper>();
+
             builder.Services.AddSignalR();
+
             builder.Services.AddCors(options =>
             {
-                options.AddDefaultPolicy(builder =>
+                options.AddDefaultPolicy(policy =>
                 {
-                    builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader();
+                    policy.AllowAnyOrigin()
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
                 });
             });
 
             var app = builder.Build();
+
+            // Initialize database
+            var initializer = new DatabaseInitializer(connectionString);
+            await initializer.InitializeAsync();
 
             app.UseCors();
             app.UseDefaultFiles();
@@ -41,55 +54,54 @@ namespace PBMAdjudicationService
             // API ENDPOINTS
             // ============================================================================
 
-            app.MapGet("/api/prescriptions", () =>
+            app.MapGet("/api/prescriptions", async (IPrescriptionRepository repo) =>
             {
-                return Results.Ok(DataStore.Prescriptions.Values.OrderByDescending(p => p.RequestedDate));
+                var prescriptions = await repo.GetAllPrescriptionsAsync();
+                return Results.Ok(prescriptions);
             });
 
-            app.MapGet("/api/prescriptions/{id}", (string id) =>
+            app.MapGet("/api/prescriptions/{id}", async (string id, IPrescriptionRepository repo) =>
             {
-                if (DataStore.Prescriptions.TryGetValue(id, out var prescription))
-                {
-                    return Results.Ok(prescription);
-                }
-                return Results.NotFound();
+                var prescription = await repo.GetPrescriptionAsync(id);
+                return prescription is null ? Results.NotFound() : Results.Ok(prescription);
             });
 
-            app.MapGet("/api/approvals", () =>
+            app.MapGet("/api/approvals", async (IPrescriptionRepository repo) =>
             {
-                return Results.Ok(DataStore.ApprovalRequests.Values
-                    .Where(a => !a.IsApproved && !a.IsDenied)
-                    .OrderByDescending(a => a.RequestedAt));
+                var approvals = await repo.GetPendingApprovalRequestsAsync();
+                return Results.Ok(approvals);
             });
 
-            app.MapGet("/api/config", () =>
+            app.MapGet("/api/config", async (IPrescriptionRepository repo) =>
             {
-                return Results.Ok(DataStore.EndpointConfigs);
+                var configs = await repo.GetAllEndpointConfigsAsync();
+                return Results.Ok(configs);
             });
 
-            app.MapPost("/api/config/{endpoint}", (string endpoint, EndpointConfig config) =>
+            app.MapPost("/api/config/{endpoint}", async (string endpoint, EndpointConfig config, IPrescriptionRepository repo) =>
             {
-                if (DataStore.EndpointConfigs.ContainsKey(endpoint))
-                {
-                    DataStore.EndpointConfigs[endpoint] = config;
-                    return Results.Ok();
-                }
-                return Results.NotFound();
+                var existing = await repo.GetEndpointConfigAsync(endpoint);
+                if (existing is null) return Results.NotFound();
+                await repo.UpsertEndpointConfigAsync(endpoint, config);
+                return Results.Ok();
             });
 
             // STEP 1: Validate Eligibility
-            app.MapPost("/api/validate/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
+            app.MapPost("/api/validate/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 prescription.Status = "Validating";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Checking eligibility for {prescription.PatientName}");
 
-                await EndpointHelper.SimulateEndpointBehavior("validate", hubContext);
+                await endpointHelper.SimulateEndpointBehavior("validate");
 
                 if (DateTime.UtcNow < prescription.EligibleDate)
                 {
@@ -98,11 +110,13 @@ namespace PBMAdjudicationService
                         $"⏰ [validate] Not eligible until {prescription.EligibleDate:yyyy-MM-dd HH:mm:ss} (waiting {waitTime.TotalMinutes:F1} minutes)");
 
                     prescription.Status = "Waiting";
+                    await repo.UpsertPrescriptionAsync(prescription);
                     await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                     return Results.Ok(new { eligible = false, waitUntil = prescription.EligibleDate });
                 }
 
                 prescription.Status = "Validated";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Prescription eligible for {prescription.PatientName}");
 
@@ -110,21 +124,25 @@ namespace PBMAdjudicationService
             });
 
             // STEP 2: Check Prior Authorization
-            app.MapPost("/api/authorize/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
+            app.MapPost("/api/authorize/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 prescription.Status = "Authorizing";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Checking prior authorization for {prescription.Medication}");
 
-                await EndpointHelper.SimulateEndpointBehavior("authorize", hubContext);
+                await endpointHelper.SimulateEndpointBehavior("authorize");
                 await Task.Delay(100);
 
                 prescription.Status = "Authorized";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Authorization approved for {prescription.Medication}");
 
@@ -132,21 +150,26 @@ namespace PBMAdjudicationService
             });
 
             // STEP 3: Adjudicate Claim
-            app.MapPost("/api/adjudicate/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
+            app.MapPost("/api/adjudicate/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 prescription.Status = "Adjudicating";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating copay for {prescription.Medication}");
-                await EndpointHelper.SimulateEndpointBehavior("adjudicate", hubContext);
-                await Task.Delay(100);
-                prescription.Copay = Random.Shared.Next(5, 50);
 
+                await endpointHelper.SimulateEndpointBehavior("adjudicate");
+                await Task.Delay(100);
+
+                prescription.Copay = Random.Shared.Next(5, 50);
                 prescription.Status = "Adjudicated";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"✅ [adjudicate] Copay calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
@@ -154,12 +177,15 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { copay = prescription.Copay });
             });
 
-            app.MapPost("/api/request-approval/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
+            // STEP 4: Request Doctor Approval
+            app.MapPost("/api/request-approval/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 if (prescription.RefillsRemaining > 0)
                 {
@@ -171,6 +197,7 @@ namespace PBMAdjudicationService
 
                 prescription.ApprovalNeededReason = "NO_REFILLS";
                 prescription.Status = "ApprovalNeeded";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
 
                 var approvalRequest = new DoctorApprovalRequest
@@ -179,28 +206,34 @@ namespace PBMAdjudicationService
                     PatientName = prescription.PatientName,
                     Medication = prescription.Medication
                 };
-                DataStore.ApprovalRequests[approvalRequest.Id] = approvalRequest;
+                await repo.UpsertApprovalRequestAsync(approvalRequest);
                 await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approvalRequest);
-                await EndpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your refill request for {prescription.Medication} is waiting for doctor approval.", hubContext);
-                await EndpointHelper.SendNotification("doctor", "Dr. Smith",
-                    $"Please approve refill for {prescription.PatientName}: {prescription.Medication}", hubContext);
+
+                await endpointHelper.SendNotification("patient", prescription.PatientName,
+                    $"Your refill request for {prescription.Medication} is waiting for doctor approval.");
+                await endpointHelper.SendNotification("doctor", "Dr. Smith",
+                    $"Please approve refill for {prescription.PatientName}: {prescription.Medication}");
+
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"📋 [approval] Doctor approval requested for {prescription.PatientName}");
+
                 return Results.Ok(new { approvalNeeded = true, approvalId = approvalRequest.Id });
             });
 
             // Send reminder to doctor
-            app.MapPost("/api/remind-doctor/{approvalId}", async (string approvalId, IHubContext<NotificationHub> hubContext) =>
+            app.MapPost("/api/remind-doctor/{approvalId}", async (
+                string approvalId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.ApprovalRequests.TryGetValue(approvalId, out var approval))
-                {
-                    return Results.NotFound();
-                }
+                var approval = await repo.GetApprovalRequestAsync(approvalId);
+                if (approval is null) return Results.NotFound();
 
                 approval.ReminderCount++;
-                await EndpointHelper.SendNotification("doctor", "Dr. Smith",
-                    $"REMINDER ({approval.ReminderCount}): Please approve refill for {approval.PatientName}: {approval.Medication}", hubContext);
+                await repo.UpsertApprovalRequestAsync(approval);
+                await endpointHelper.SendNotification("doctor", "Dr. Smith",
+                    $"REMINDER ({approval.ReminderCount}): Please approve refill for {approval.PatientName}: {approval.Medication}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"🔔 [approval] Reminder #{approval.ReminderCount} sent to doctor for {approval.PatientName}");
@@ -208,24 +241,20 @@ namespace PBMAdjudicationService
                 return Results.Ok();
             });
 
-            // Doctor approves/denies - Temporal version
+            // Doctor approves/denies
             app.MapPost("/api/approve/{approvalId}", async (
                 string approvalId,
                 bool approved,
+                IPrescriptionRepository repo,
                 [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.ApprovalRequests.TryGetValue(approvalId, out var approval))
-                {
-                    return Results.NotFound();
-                }
+                var approval = await repo.GetApprovalRequestAsync(approvalId);
+                if (approval is null) return Results.NotFound();
 
-                if (!DataStore.Prescriptions.TryGetValue(approval.PrescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(approval.PrescriptionId);
+                if (prescription is null) return Results.NotFound();
 
-                // Send signal to Temporal workflow
                 var workflowId = $"prescription-{prescription.PatientId}-{approval.PrescriptionId}";
                 var handle = client.GetWorkflowHandle(workflowId);
 
@@ -234,8 +263,6 @@ namespace PBMAdjudicationService
                     await handle.SignalAsync((PrescriptionWorkflow wf) => wf.ApproveAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"✅ [temporal] Doctor approved workflow for {prescription.PatientName}");
-
-                    // Update local state
                     approval.IsApproved = true;
                     prescription.Status = "Approved";
                     prescription.RefillsRemaining = 3;
@@ -245,77 +272,85 @@ namespace PBMAdjudicationService
                     await handle.SignalAsync((PrescriptionWorkflow wf) => wf.DenyAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"❌ [temporal] Doctor denied workflow for {prescription.PatientName}");
-
-                    // Update local state
                     approval.IsDenied = true;
                     prescription.Status = "Denied";
                 }
 
+                await repo.UpsertPrescriptionAsync(prescription);
+                await repo.UpsertApprovalRequestAsync(approval);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
 
                 return Results.Ok();
             });
 
+            // Notify
             app.MapPost("/api/notify/{prescriptionId}", async (
                 string prescriptionId,
                 string recipient,
                 string recipientName,
                 string message,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
-                // Mark as retrying before attempting
                 prescription.NotificationStatus = "Retrying";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
 
-                await EndpointHelper.SimulateEndpointBehavior("notify", hubContext);
+                await endpointHelper.SimulateEndpointBehavior("notify");
 
-                // Success
                 prescription.NotificationStatus = "Sent";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await EndpointHelper.SendNotification(recipient, recipientName, message, hubContext);
+                await endpointHelper.SendNotification(recipient, recipientName, message);
+
                 return Results.Ok();
             });
 
+            // Notify failed
             app.MapPost("/api/notify-failed/{prescriptionId}", async (
                 string prescriptionId,
+                IPrescriptionRepository repo,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
                 prescription.NotificationStatus = "Failed";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+
                 return Results.Ok();
             });
 
             // STEP 5: Submit to Pharmacy
-            app.MapPost("/api/submit/{prescriptionId}", async (string prescriptionId, IHubContext<NotificationHub> hubContext) =>
+            app.MapPost("/api/submit/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
             {
-
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 prescription.Status = "Submitting";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to pharmacy for {prescription.PatientName}");
-                await EndpointHelper.SimulateEndpointBehavior("submit", hubContext);
 
+                await endpointHelper.SimulateEndpointBehavior("submit");
                 await Task.Delay(100);
 
                 prescription.Status = "Completed";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
 
-                await EndpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your prescription for {prescription.Medication} has been sent to your pharmacy. Copay: ${prescription.Copay:F2}", hubContext);
+                await endpointHelper.SendNotification("patient", prescription.PatientName,
+                    $"Your prescription for {prescription.Medication} has been sent to your pharmacy. Copay: ${prescription.Copay:F2}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"✅ [submit] Prescription completed for {prescription.PatientName}");
@@ -323,8 +358,10 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { submitted = true });
             });
 
-            // Generate load for testing (20 prescriptions)
-            app.MapPost("/api/admin/generate-load", async (IHubContext<NotificationHub> hubContext) =>
+            // Generate load
+            app.MapPost("/api/admin/generate-load", async (
+                IPrescriptionRepository repo,
+                IHubContext<NotificationHub> hubContext) =>
             {
                 var medications = new[] { "Lipitor", "Metformin", "Lisinopril", "Atorvastatin", "Omeprazole", "Amlodipine", "Simvastatin" };
                 var firstNames = new[] { "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara" };
@@ -332,18 +369,11 @@ namespace PBMAdjudicationService
 
                 for (int i = 0; i < 20; i++)
                 {
-                    // Only 2-3 prescriptions should be not eligible yet
                     DateTime eligibleDate;
                     if (i < 2)
-                    {
-                        // First 2: Not eligible yet (1-2 minutes in the future)
                         eligibleDate = DateTime.UtcNow.AddMinutes(Random.Shared.Next(1, 3));
-                    }
                     else
-                    {
-                        // Rest: Already eligible (in the past)
                         eligibleDate = DateTime.UtcNow.AddMinutes(Random.Shared.Next(-120, 0));
-                    }
 
                     var prescription = new Prescription
                     {
@@ -355,7 +385,7 @@ namespace PBMAdjudicationService
                         Status = "Pending"
                     };
 
-                    DataStore.Prescriptions[prescription.Id] = prescription;
+                    await repo.UpsertPrescriptionAsync(prescription);
                     await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 }
 
@@ -363,83 +393,30 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { generated = 20 });
             });
 
-            // Reset all data
-            app.MapPost("/api/admin/reset", async (IHubContext<NotificationHub> hubContext) =>
+            // Reset
+            app.MapPost("/api/admin/reset", async (
+                IPrescriptionRepository repo,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                // Clear all prescriptions except the initial 5
-                DataStore.Prescriptions.Clear();
-                DataStore.ApprovalRequests.Clear();
+                await repo.ResetAsync();
 
-                // Re-populate with initial data
-                var prescriptions = new[]
-                {
-                    new Prescription
-                    {
-                        PatientId = "P001",
-                        PatientName = "John Smith",
-                        Medication = "Lipitor 20mg",
-                        EligibleDate = DateTime.UtcNow.AddDays(-1),
-                        RefillsRemaining = 3,
-                        Status = "Pending"
-                    },
-                    new Prescription
-                    {
-                        PatientId = "P002",
-                        PatientName = "Michael Davis",
-                        Medication = "Omeprazole 20mg",
-                        EligibleDate = DateTime.UtcNow.AddMinutes(2),
-                        RefillsRemaining = 5,
-                        Status = "Pending"
-                    },
-                    new Prescription
-                    {
-                        PatientId = "P003",
-                        PatientName = "Mary Johnson",
-                        Medication = "Metformin 500mg",
-                        EligibleDate = DateTime.UtcNow.AddHours(-2),
-                        RefillsRemaining = 2,
-                        Status = "Pending"
-                    },
-                    new Prescription
-                    {
-                        PatientId = "P004",
-                        PatientName = "Robert Williams",
-                        Medication = "Lisinopril 10mg",
-                        EligibleDate = DateTime.UtcNow.AddDays(-5),
-                        RefillsRemaining = 0,
-                        Status = "Pending"
-                    },
-                    new Prescription
-                    {
-                        PatientId = "P005",
-                        PatientName = "Patricia Brown",
-                        Medication = "Atorvastatin 40mg",
-                        EligibleDate = DateTime.UtcNow.AddDays(-3),
-                        RefillsRemaining = 1,
-                        Status = "Pending"
-                    },
-                };
-
+                var prescriptions = await repo.GetAllPrescriptionsAsync();
                 foreach (var rx in prescriptions)
-                {
-                    DataStore.Prescriptions[rx.Id] = rx;
                     await hubContext.Clients.All.SendAsync("PrescriptionUpdated", rx);
-                }
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"🔄 [admin] System reset - restored 5 default prescriptions");
                 return Results.Ok(new { reset = true });
             });
 
-            // NEW: Start Temporal workflow
+            // Start Temporal workflow
             app.MapPost("/api/workflow/start/{prescriptionId}", async (
                 string prescriptionId,
+                IPrescriptionRepository repo,
                 [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 var input = new PrescriptionInput
                 {
@@ -450,7 +427,6 @@ namespace PBMAdjudicationService
                     RefillsRemaining = prescription.RefillsRemaining
                 };
 
-                // Start the workflow
                 var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
                 await client.StartWorkflowAsync(
                     (PrescriptionWorkflow wf) => wf.RunAsync(input),
@@ -466,36 +442,38 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { workflowId });
             });
 
-            app.MapPost("/api/prescriptions", async (Prescription prescription, IHubContext<NotificationHub> hubContext) =>
+            // Create prescription
+            app.MapPost("/api/prescriptions", async (
+                Prescription prescription,
+                IPrescriptionRepository repo,
+                IHubContext<NotificationHub> hubContext) =>
             {
-                DataStore.Prescriptions[prescription.Id] = prescription;
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"📝 [admin] Created new prescription for {prescription.PatientName}");
                 return Results.Ok(prescription);
             });
 
-            // Handle approval timeout
+            // Approval timeout
             app.MapPost("/api/approval-timeout/{prescriptionId}", async (
                 string prescriptionId,
+                IPrescriptionRepository repo,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
-                // Find and mark approval request as timed out
-                var approval = DataStore.ApprovalRequests.Values
-                    .FirstOrDefault(a => a.PrescriptionId == prescriptionId && !a.IsApproved && !a.IsDenied);
-
+                var approval = await repo.GetApprovalRequestByPrescriptionAsync(prescriptionId);
                 if (approval != null)
                 {
-                    approval.IsDenied = true; // Mark as denied due to timeout
+                    approval.IsDenied = true;
+                    await repo.UpsertApprovalRequestAsync(approval);
                     await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approval);
                 }
 
                 prescription.Status = "ApprovalTimeout";
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"⏰ [approval] Approval timeout for {prescription.PatientName} - no response from doctor");
@@ -503,17 +481,19 @@ namespace PBMAdjudicationService
                 return Results.Ok();
             });
 
-            // Mark prescription on hold (submission failed)
+            // On hold
             app.MapPost("/api/on-hold/{prescriptionId}", async (
                 string prescriptionId,
+                int failedStep,
+                IPrescriptionRepository repo,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                if (!DataStore.Prescriptions.TryGetValue(prescriptionId, out var prescription))
-                {
-                    return Results.NotFound();
-                }
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
 
                 prescription.Status = "OnHold";
+                prescription.FailedStep = failedStep;
+                await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"⚠️ [admin] Prescription on hold for {prescription.PatientName} - pharmacy submission failed, awaiting manual intervention");
@@ -525,4 +505,3 @@ namespace PBMAdjudicationService
         }
     }
 }
-

@@ -134,10 +134,17 @@ namespace PBMAdjudication.Worker
 
                     if (!receivedResponse)
                     {
-                        // Timeout! Mark approval as timed out
-                        await Workflow.ExecuteActivityAsync(
-                            (PrescriptionActivities a) => a.HandleApprovalTimeoutAsync(input.PrescriptionId),
-                            DefaultActivityOptions);
+                        try
+                        {
+                            await Workflow.ExecuteActivityAsync(
+                                (PrescriptionActivities a) => a.HandleApprovalTimeoutAsync(input.PrescriptionId),
+                                DefaultActivityOptions);
+                        }
+                        catch (Temporalio.Exceptions.ActivityFailureException)
+                        {
+                            // API may be temporarily unavailable - workflow still completes
+                            // with ApprovalTimeout status. State will be reconciled when API recovers.
+                        }
 
                         result.Status = "ApprovalTimeout";
                         result.Success = false;
@@ -231,13 +238,19 @@ namespace PBMAdjudication.Worker
 
         private async Task HandlePrescriptionFailureAsync(WorkflowResult result, string prescriptionId, int failedStep)
         {
-            // Pharmacy submission failed - needs manual intervention
             result.Status = "OnHold";
             result.Success = false;
-            // Call activity to update backend status
-            await Workflow.ExecuteActivityAsync(
-                (PrescriptionActivities a) => a.MarkOnHoldAsync(prescriptionId, failedStep),
-                DefaultActivityOptions);
+            try
+            {
+                await Workflow.ExecuteActivityAsync(
+                    (PrescriptionActivities a) => a.MarkOnHoldAsync(prescriptionId, failedStep),
+                    DefaultActivityOptions);
+            }
+            catch (Temporalio.Exceptions.ActivityFailureException)
+            {
+                // API may be temporarily unavailable - workflow still completes
+                // with OnHold status. State will be reconciled when API recovers.
+            }
         }
     }
 }
