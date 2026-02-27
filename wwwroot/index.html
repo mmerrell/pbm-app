@@ -5,98 +5,175 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PBM Adjudication System</title>
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.14/dist/browser/signalr.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        * {
+        /* ─── Temporal Brand Tokens ─────────────────────────────── */
+        :root {
+            --uv:          #444CE7;
+            --uv-dim:      #3340C0;
+            --uv-glow:     rgba(68, 76, 231, 0.25);
+            --uv-subtle:   rgba(68, 76, 231, 0.10);
+            --space:       #141414;
+            --space-1:     #1c1c1c;
+            --space-2:     #242424;
+            --space-3:     #2e2e2e;
+            --space-4:     #3a3a3a;
+            --off-white:   #F8FAFC;
+            --muted:       #8a8a9a;
+            --border:      rgba(255,255,255,0.08);
+            --border-uv:   rgba(68, 76, 231, 0.35);
+
+            --green:       #22c55e;
+            --green-bg:    rgba(34, 197, 94, 0.12);
+            --red:         #ef4444;
+            --red-bg:      rgba(239, 68, 68, 0.12);
+            --amber:       #f59e0b;
+            --amber-bg:    rgba(245, 158, 11, 0.12);
+            --cyan:        #06b6d4;
+            --cyan-bg:     rgba(6, 182, 212, 0.12);
+
+            --radius-sm:   4px;
+            --radius:      8px;
+            --radius-lg:   12px;
+
+            --font-sans:   'Inter', system-ui, sans-serif;
+            --font-mono:   'IBM Plex Mono', 'Consolas', monospace;
+        }
+
+        /* ─── Reset & Base ──────────────────────────────────────── */
+        *, *::before, *::after {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f5f5f5;
+            font-family: var(--font-sans);
+            background: var(--space);
+            color: var(--off-white);
             height: 100vh;
             overflow: hidden;
         }
 
+        /* ─── Layout ────────────────────────────────────────────── */
         .container {
             display: grid;
             grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            padding: 10px;
+            gap: 12px;
+            padding: 12px;
             height: 100vh;
         }
 
+        /* ─── Panel ─────────────────────────────────────────────── */
         .panel {
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: var(--space-1);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
             display: flex;
             flex-direction: column;
             overflow: hidden;
         }
 
         .panel-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            font-size: 20px;
-            font-weight: bold;
-            text-align: center;
+            background: var(--space-2);
+            border-bottom: 1px solid var(--border);
+            color: var(--off-white);
+            padding: 16px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
+        .panel-header .header-icon {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-header .header-icon svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+
         .panel-content {
             flex: 1;
             overflow-y: auto;
-            padding: 20px;
-            padding-bottom: 80px
+            padding: 16px;
+            padding-bottom: 80px;
+            scrollbar-width: thin;
+            scrollbar-color: var(--space-4) transparent;
         }
 
+        .panel-content::-webkit-scrollbar { width: 4px; }
+        .panel-content::-webkit-scrollbar-track { background: transparent; }
+        .panel-content::-webkit-scrollbar-thumb { background: var(--space-4); border-radius: 2px; }
+
+        /* ─── Prescription Card ─────────────────────────────────── */
         .prescription-card {
-            background: #f8f9fa;
-            border-left: 4px solid #667eea;
-            padding: 12px;
-            margin-bottom: 12px;
-            border-radius: 4px;
+            background: var(--space-2);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--uv);
+            padding: 14px;
+            margin-bottom: 10px;
+            border-radius: var(--radius);
             position: relative;
+            transition: border-color 0.2s;
         }
 
-        .prescription-card.completed {
-            background: #d4edda;  /* Light green */
+        .prescription-card:hover {
+            border-color: var(--border-uv);
         }
 
-        .prescription-card.failed {
-            background: #f8d7da;  /* Light red */
+        .prescription-card.status-completed {
+            border-left-color: var(--green);
+            background: linear-gradient(135deg, var(--space-2) 0%, rgba(34, 197, 94, 0.04) 100%);
+        }
+
+        .prescription-card.status-denied {
+            border-left-color: var(--red);
+            background: linear-gradient(135deg, var(--space-2) 0%, rgba(239, 68, 68, 0.04) 100%);
+        }
+
+        .prescription-card.status-failed {
+            border-left-color: var(--amber);
+            background: linear-gradient(135deg, var(--space-2) 0%, rgba(245, 158, 11, 0.04) 100%);
         }
 
         .prescription-card h3 {
-            margin-bottom: 6px;
-            color: #333;
-            font-size: 16px;
-            padding-right: 80px; /* Make room for copay badge */
+            margin-bottom: 4px;
+            color: var(--off-white);
+            font-size: 14px;
+            font-weight: 600;
+            padding-right: 80px;
         }
 
         .prescription-card .medication {
-            font-size: 16px;
-            font-weight: bold;
-            color: #667eea;
-            margin-bottom: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--uv);
+            margin-bottom: 10px;
+            font-family: var(--font-mono);
         }
 
         .prescription-card .copay-badge {
             position: absolute;
             top: 12px;
             right: 12px;
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            color: white;
-            padding: 8px 12px;
-            border-radius: 6px;
-            font-weight: bold;
-            font-size: 14px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            background: var(--green-bg);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.25);
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            font-weight: 700;
+            font-size: 13px;
+            font-family: var(--font-mono);
         }
 
         .prescription-card .info-row {
@@ -106,48 +183,31 @@
             margin-bottom: 4px;
         }
 
-        .prescription-card .detail {
-            color: #666;
-            font-size: 12px;
-        }
-
+        .prescription-card .detail,
         .prescription-card .detail-right {
-            color: #666;
-            font-size: 12px;
-            text-align: right;
+            color: var(--muted);
+            font-size: 11px;
+            font-family: var(--font-mono);
         }
 
-        .prescription-card.status-completed {
-            border-left-color: #28a745;
-            background: #d4edda;
-        }
+        .prescription-card .detail-right { text-align: right; }
 
-        .prescription-card.status-denied {
-            border-left-color: #dc3545;
-            background: #f8d7da;
-        }
-
-        .prescription-card.status-failed {
-            border-left-color: #ff9800;
-            background: #fde8c8;
-        }
-
-        /* Timeline Styles */
+        /* ─── Timeline ──────────────────────────────────────────── */
         .timeline {
             display: flex;
             align-items: center;
-            margin-top: 25px;
+            margin-top: 14px;
             position: relative;
             padding-top: 5px;
         }
 
         .timeline-line {
             position: absolute;
-            top: 13px;  /* Changed from 8px to center on 16px pips */
+            top: 13px;
             left: 8px;
             right: 8px;
-            height: 2px;
-            background: #ddd;
+            height: 1px;
+            background: var(--space-4);
             z-index: 1;
         }
 
@@ -170,88 +230,92 @@
             width: 16px;
             height: 16px;
             border-radius: 50%;
-            background: #ddd;
-            border: 2px solid #ddd;
+            background: var(--space-3);
+            border: 1px solid var(--space-4);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 9px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
+            color: var(--muted);
         }
 
         .timeline-pip.completed {
-            background: #28a745;
-            border-color: #28a745;
-            color: white;
+            background: var(--green-bg);
+            border-color: var(--green);
+            color: var(--green);
         }
 
         .timeline-pip.current {
             width: 20px;
             height: 20px;
-            background: #667eea;
-            border-color: #667eea;
-            color: white;
+            background: var(--uv-subtle);
+            border-color: var(--uv);
+            border-width: 2px;
+            color: var(--uv);
             animation: pulse 2s infinite;
         }
 
         .timeline-pip.failed {
-            background: #dc3545;
-            border-color: #dc3545;
-            color: white;
+            background: var(--red-bg);
+            border-color: var(--red);
+            color: var(--red);
         }
 
         .timeline-pip.infra-failed {
-            background: #ff9800;
-            border-color: #ff9800;
-            color: white;
+            background: var(--amber-bg);
+            border-color: var(--amber);
+            color: var(--amber);
         }
 
         .timeline-pip.waiting {
-            background: #ff9800;
-            border-color: #ff9800;
-            color: white;
+            background: var(--amber-bg);
+            border-color: var(--amber);
+            color: var(--amber);
         }
 
         .timeline-pip.skipped {
-            background: #e9ecef;
-            border-color: #adb5bd;
-            color: #6c757d;
+            background: var(--space-3);
+            border-color: var(--space-4);
+            color: var(--space-4);
             font-size: 8px;
         }
 
         .timeline-pip.retrying {
-            background: #17a2b8;
-            border-color: #17a2b8;
-            color: white;
+            background: var(--cyan-bg);
+            border-color: var(--cyan);
+            color: var(--cyan);
             animation: pulse 1s infinite;
         }
 
         @keyframes pulse {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.1); }
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--uv-glow); }
+            50% { transform: scale(1.1); box-shadow: 0 0 0 4px transparent; }
         }
 
         .timeline-label {
             position: absolute;
             top: -22px;
             font-size: 9px;
-            font-weight: bold;
-            color: white;
+            font-weight: 600;
+            color: var(--space);
             white-space: nowrap;
-            background: #ff9800;  /* Orange background */
-            padding: 3px 8px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            background: var(--amber);
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-family: var(--font-mono);
+            letter-spacing: 0.02em;
         }
 
         .timeline-tooltip {
             position: absolute;
             bottom: 25px;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
+            background: var(--space-3);
+            border: 1px solid var(--border);
+            color: var(--off-white);
             padding: 6px 10px;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             font-size: 10px;
             white-space: nowrap;
             display: none;
@@ -260,300 +324,299 @@
             transform: translateX(-50%);
             min-width: 120px;
             text-align: center;
+            font-family: var(--font-mono);
         }
 
-        /* First step tooltip - align left to avoid cutoff */
-        .timeline-step:first-child .timeline-tooltip {
-            left: 0;
-            transform: none;
-        }
+        .timeline-step:first-child .timeline-tooltip { left: 0; transform: none; }
+        .timeline-step:last-child .timeline-tooltip { left: auto; right: 0; transform: none; }
+        .timeline-step:hover .timeline-tooltip { display: block; }
 
-        /* Last step tooltip - align right to avoid cutoff */
-        .timeline-step:last-child .timeline-tooltip {
-            left: auto;
-            right: 0;
-            transform: none;
-        }
-
-        .timeline-step:hover .timeline-tooltip {
-            display: block;
-        }
-
-        /* Doctor Portal Styles */
+        /* ─── Doctor Portal ─────────────────────────────────────── */
         .approval-card {
-            background: #fff3cd;
-            border-left: 4px solid #ffc107;
-            padding: 12px;
-            margin-bottom: 12px;
-            border-radius: 4px;
+            background: var(--space-2);
+            border: 1px solid var(--amber-bg);
+            border-left: 3px solid var(--amber);
+            padding: 14px;
+            margin-bottom: 10px;
+            border-radius: var(--radius);
         }
 
         .approval-card h3 {
-            margin-bottom: 6px;
-            color: #333;
-            font-size: 16px;
+            margin-bottom: 4px;
+            color: var(--off-white);
+            font-size: 14px;
+            font-weight: 600;
         }
 
         .approval-card .medication {
-            font-size: 14px;
-            font-weight: bold;
-            color: #333;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--amber);
             margin-bottom: 6px;
+            font-family: var(--font-mono);
         }
 
         .approval-card .timestamp {
             font-size: 11px;
-            color: #666;
+            color: var(--muted);
             margin-bottom: 8px;
+            font-family: var(--font-mono);
         }
 
-        .approval-buttons {
-            display: flex;
-            gap: 8px;
-        }
+        .approval-buttons { display: flex; gap: 8px; }
 
+        /* ─── Buttons ────────────────────────────────────────────── */
         .btn {
-            padding: 8px 16px;
+            padding: 7px 14px;
             border: none;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            font-weight: bold;
-            transition: all 0.3s;
-            font-size: 13px;
+            font-weight: 600;
+            font-size: 12px;
+            font-family: var(--font-sans);
+            transition: all 0.15s;
+            letter-spacing: 0.02em;
         }
 
         .btn-approve {
-            background: #28a745;
-            color: white;
+            background: var(--green-bg);
+            color: var(--green);
+            border: 1px solid rgba(34, 197, 94, 0.3);
             flex: 1;
         }
 
         .btn-approve:hover {
-            background: #218838;
+            background: rgba(34, 197, 94, 0.2);
+            border-color: var(--green);
         }
 
         .btn-deny {
-            background: #dc3545;
-            color: white;
+            background: var(--red-bg);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             flex: 1;
         }
 
         .btn-deny:hover {
-            background: #c82333;
+            background: rgba(239, 68, 68, 0.2);
+            border-color: var(--red);
         }
 
         .btn-new-request {
-            background: white;
-            color: #667eea;
-            border: 2px solid white;
-            padding: 6px 12px;
-            font-size: 14px;
+            background: var(--uv);
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            border-radius: var(--radius-sm);
         }
 
-        .btn-new-request:hover {
-            background: rgba(255,255,255,0.9);
-        }
+        .btn-new-request:hover { background: var(--uv-dim); }
 
+        /* ─── Empty State ────────────────────────────────────────── */
         .empty-state {
             text-align: center;
-            color: #999;
-            padding: 40px 20px;
-            font-size: 14px;
+            color: var(--muted);
+            padding: 48px 20px;
+            font-size: 13px;
+            font-family: var(--font-mono);
         }
 
-        /* Modal Styles */
+        /* ─── Modal ─────────────────────────────────────────────── */
         .modal {
             display: none;
             position: fixed;
             z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
             align-items: center;
             justify-content: center;
         }
 
-        .modal.show {
-            display: flex;
-        }
+        .modal.show { display: flex; }
 
         .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            max-width: 500px;
+            background: var(--space-2);
+            border: 1px solid var(--border);
+            padding: 28px;
+            border-radius: var(--radius-lg);
+            max-width: 480px;
             width: 90%;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 24px 48px rgba(0,0,0,0.5);
         }
 
         .modal-header {
-            font-size: 24px;
-            font-weight: bold;
+            font-size: 18px;
+            font-weight: 700;
             margin-bottom: 20px;
-            color: #333;
+            color: var(--off-white);
         }
 
-        .form-group {
-            margin-bottom: 15px;
-        }
+        .form-group { margin-bottom: 14px; }
 
         .form-group label {
             display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #555;
-            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
         }
 
         .form-group input,
         .form-group select {
             width: 100%;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            font-size: 14px;
+            padding: 9px 12px;
+            background: var(--space-3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            color: var(--off-white);
+            font-size: 13px;
+            font-family: var(--font-sans);
+            transition: border-color 0.15s;
         }
 
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--uv);
+            box-shadow: 0 0 0 3px var(--uv-glow);
         }
+
+        .form-group select option { background: var(--space-3); }
+
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
 
         .btn-submit {
             flex: 1;
-            background: #667eea;
+            background: var(--uv);
             color: white;
             padding: 10px;
+            border-radius: var(--radius-sm);
+            border: none;
         }
 
-        .btn-submit:hover {
-            background: #5568d3;
-        }
+        .btn-submit:hover { background: var(--uv-dim); }
 
         .btn-cancel {
             flex: 1;
-            background: #6c757d;
-            color: white;
+            background: var(--space-3);
+            color: var(--muted);
             padding: 10px;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
         }
 
-        .btn-cancel:hover {
-            background: #5a6268;
-        }
+        .btn-cancel:hover { color: var(--off-white); border-color: var(--space-4); }
 
-        /* Confirmation Modal */
+        /* ─── Confirm Modal ──────────────────────────────────────── */
         .confirm-modal {
             display: none;
             position: fixed;
             z-index: 2000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0,0,0,0.5);
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
             align-items: center;
             justify-content: center;
         }
 
-        .confirm-modal.show {
-            display: flex;
-        }
+        .confirm-modal.show { display: flex; }
 
         .confirm-content {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            max-width: 400px;
+            background: var(--space-2);
+            border: 1px solid var(--border);
+            padding: 28px;
+            border-radius: var(--radius-lg);
+            max-width: 380px;
             width: 90%;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            box-shadow: 0 24px 48px rgba(0,0,0,0.5);
             text-align: center;
         }
 
         .confirm-message {
-            font-size: 16px;
-            color: #333;
+            font-size: 14px;
+            color: var(--off-white);
             margin-bottom: 20px;
+            line-height: 1.5;
         }
 
-        .confirm-buttons {
-            display: flex;
-            gap: 10px;
-        }
+        .confirm-buttons { display: flex; gap: 10px; }
 
         .btn-confirm-yes {
             flex: 1;
-            background: #dc3545;
-            color: white;
+            background: var(--red-bg);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
             padding: 10px;
-            border: none;
-            border-radius: 4px;
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            font-weight: bold;
-        }
-
-        .btn-confirm-yes:hover {
-            background: #c82333;
-        }
-
-        .btn-confirm-no {
-            flex: 1;
-            background: #6c757d;
-            color: white;
-            padding: 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-        }
-
-        .btn-confirm-no:hover {
-            background: #5a6268;
-        }
-
-        /* Control Panel Styles */
-        .admin-section {
-            margin-bottom: 15px;
-            padding-bottom: 15px;
-            border-bottom: 2px solid #ddd;
-        }
-
-        .admin-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn-admin {
-            flex: 1;
-            padding: 10px;
-            background: #667eea;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
+            font-weight: 600;
+            font-family: var(--font-sans);
             font-size: 13px;
         }
 
-        .btn-admin:hover {
-            background: #5568d3;
+        .btn-confirm-yes:hover { background: rgba(239, 68, 68, 0.2); border-color: var(--red); }
+
+        .btn-confirm-no {
+            flex: 1;
+            background: var(--space-3);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            padding: 10px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            font-family: var(--font-sans);
+            font-size: 13px;
         }
+
+        .btn-confirm-no:hover { color: var(--off-white); }
+
+        /* ─── Control Panel ──────────────────────────────────────── */
+        .admin-section {
+            margin-bottom: 14px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .admin-buttons { display: flex; gap: 8px; }
+
+        .btn-admin {
+            flex: 1;
+            padding: 9px;
+            background: var(--uv);
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 12px;
+            font-family: var(--font-sans);
+            letter-spacing: 0.02em;
+            transition: background 0.15s;
+        }
+
+        .btn-admin:hover { background: var(--uv-dim); }
 
         .btn-reset {
-            background: #dc3545;
+            background: var(--red-bg);
+            color: var(--red);
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
 
-        .btn-reset:hover {
-            background: #c82333;
-        }
+        .btn-reset:hover { background: rgba(239, 68, 68, 0.2); }
 
+        /* ─── Endpoint Config ────────────────────────────────────── */
         .endpoint-config {
-            background: #f8f9fa;
-            border-radius: 6px;
-            padding: 10px;
-            margin-bottom: 10px;
+            background: var(--space-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 10px 12px;
+            margin-bottom: 8px;
         }
 
         .endpoint-header {
@@ -564,22 +627,24 @@
         }
 
         .endpoint-config h3 {
-            color: #333;
-            font-size: 12px;
+            color: var(--off-white);
+            font-size: 11px;
             text-transform: uppercase;
+            letter-spacing: 0.08em;
+            font-weight: 600;
             margin: 0;
         }
 
-        .control-group {
-            margin-bottom: 8px;
-        }
+        .control-group { margin-bottom: 6px; }
 
         .control-label {
             display: block;
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 3px;
-            font-weight: bold;
+            font-size: 10px;
+            color: var(--muted);
+            margin-bottom: 4px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .slider-container {
@@ -590,76 +655,72 @@
 
         input[type="range"] {
             flex: 1;
-            height: 4px;
+            height: 3px;
             border-radius: 2px;
-            background: #ddd;
+            background: var(--space-4);
             outline: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            width: 14px;
-            height: 14px;
-            border-radius: 50%;
-            background: #667eea;
+            -webkit-appearance: none;
             cursor: pointer;
         }
 
-        .slider-value {
-            min-width: 50px;
-            text-align: right;
-            font-weight: bold;
-            color: #667eea;
-            font-size: 11px;
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 13px;
+            height: 13px;
+            border-radius: 50%;
+            background: var(--uv);
+            cursor: pointer;
+            border: 2px solid var(--space-1);
+            box-shadow: 0 0 0 1px var(--uv);
+            transition: transform 0.15s;
         }
 
-        /* Toggle Switch */
+        input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+        .slider-value {
+            min-width: 48px;
+            text-align: right;
+            font-weight: 600;
+            color: var(--uv);
+            font-size: 11px;
+            font-family: var(--font-mono);
+        }
+
+        /* ─── Toggle Switch ──────────────────────────────────────── */
         .toggle-switch {
             position: relative;
-            width: 44px;
-            height: 22px;
+            width: 40px;
+            height: 20px;
         }
 
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
 
         .toggle-slider {
             position: absolute;
             cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #28a745;
-            transition: .3s;
-            border-radius: 22px;
+            inset: 0;
+            background: var(--green);
+            transition: .25s;
+            border-radius: 20px;
         }
 
         .toggle-slider:before {
             position: absolute;
             content: "";
-            height: 16px;
-            width: 16px;
+            height: 14px;
+            width: 14px;
             left: 3px;
             bottom: 3px;
-            background-color: white;
-            transition: .3s;
+            background: white;
+            transition: .25s;
             border-radius: 50%;
         }
 
-        input:checked + .toggle-slider {
-            background-color: #dc3545;
-        }
+        input:checked + .toggle-slider { background: var(--red); }
+        input:checked + .toggle-slider:before { transform: translateX(20px); }
 
-        input:checked + .toggle-slider:before {
-            transform: translateX(22px);
-        }
-
-        .logs-section {
-            margin-top: 15px;
-        }
+        /* ─── Logs ───────────────────────────────────────────────── */
+        .logs-section { margin-top: 14px; }
 
         .logs-header {
             display: flex;
@@ -669,130 +730,218 @@
         }
 
         .logs-header h3 {
-            font-size: 12px;
+            font-size: 11px;
             text-transform: uppercase;
-            color: #333;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            font-weight: 600;
         }
 
         .btn-clear-logs {
-            padding: 4px 10px;
-            background: #6c757d;
-            color: white;
-            border: none;
-            border-radius: 4px;
+            padding: 3px 10px;
+            background: var(--space-3);
+            color: var(--muted);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
             cursor: pointer;
-            font-size: 11px;
+            font-size: 10px;
+            font-family: var(--font-sans);
+            transition: color 0.15s;
         }
 
-        .btn-clear-logs:hover {
-            background: #5a6268;
-        }
+        .btn-clear-logs:hover { color: var(--off-white); }
 
         .logs-container {
-            background: #1e1e1e;
-            color: #d4d4d4;
-            padding: 10px;
-            border-radius: 4px;
-            height: 250px;
+            background: var(--space);
+            border: 1px solid var(--border);
+            color: #c4c4d4;
+            padding: 10px 12px;
+            border-radius: var(--radius);
+            height: 200px;
             overflow-y: auto;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 11px;
-            line-height: 1.4;
+            font-family: var(--font-mono);
+            font-size: 10.5px;
+            line-height: 1.5;
+            scrollbar-width: thin;
+            scrollbar-color: var(--space-4) transparent;
         }
+
+        .logs-container::-webkit-scrollbar { width: 3px; }
+        .logs-container::-webkit-scrollbar-thumb { background: var(--space-4); }
 
         .log-entry {
-            margin-bottom: 3px;
+            margin-bottom: 2px;
             word-wrap: break-word;
+            color: var(--muted);
         }
 
-        /* Connection Status */
+        .log-entry::before {
+            content: '› ';
+            color: var(--uv);
+        }
+
+        /* ─── Connection Status ──────────────────────────────────── */
         .connection-status {
             position: fixed;
-            top: 10px;
-            right: 10px;
-            padding: 8px 16px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: bold;
+            top: 12px;
+            right: 12px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            font-family: var(--font-mono);
             z-index: 1000;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.2s;
             user-select: none;
+            letter-spacing: 0.04em;
+            border: 1px solid;
         }
 
-        .connection-status:hover {
-            transform: scale(1.05);
-        }
+        .connection-status:hover { transform: translateY(-1px); }
 
         .connection-status.connected {
-            background: #28a745;
-            color: white;
+            background: var(--green-bg);
+            color: var(--green);
+            border-color: rgba(34, 197, 94, 0.3);
         }
 
         .connection-status.disconnected {
-            background: #dc3545;
-            color: white;
+            background: var(--red-bg);
+            color: var(--red);
+            border-color: rgba(239, 68, 68, 0.3);
         }
 
         .connection-status.auto-mode {
-            background: #667eea;
-            color: white;
+            background: var(--uv-subtle);
+            color: var(--uv);
+            border-color: var(--border-uv);
         }
 
+        /* ─── Status Tooltip ─────────────────────────────────────── */
         .status-tooltip {
             position: fixed;
-            background: rgba(0, 0, 0, 0.9);
-            color: white;
-            padding: 10px;
-            border-radius: 4px;
+            background: var(--space-2);
+            border: 1px solid var(--border);
+            color: var(--off-white);
+            padding: 10px 14px;
+            border-radius: var(--radius);
             font-size: 11px;
+            font-family: var(--font-mono);
             z-index: 1001;
             display: none;
             max-width: 200px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+            line-height: 1.6;
         }
 
-        .status-tooltip.show {
-            display: block;
+        .status-tooltip.show { display: block; }
+
+        /* ─── Notification status inline badges ──────────────────── */
+        .notif-badge {
+            margin-top: 8px;
+            padding: 5px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 10px;
+            font-family: var(--font-mono);
+            display: flex;
+            align-items: center;
+            gap: 5px;
         }
 
+        .notif-badge.retrying  { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.25); }
+        .notif-badge.failed    { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(239, 68, 68, 0.25); }
+        .notif-badge.sent      { background: var(--green-bg); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.25); }
+
+        /* ─── Process button ─────────────────────────────────────── */
+        .btn-process {
+            width: 100%;
+            margin-top: 8px;
+            padding: 7px;
+            background: var(--uv-subtle);
+            color: var(--uv);
+            border: 1px solid var(--border-uv);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 11px;
+            font-family: var(--font-sans);
+            letter-spacing: 0.04em;
+            transition: all 0.15s;
+        }
+
+        .btn-process:hover {
+            background: var(--uv);
+            color: white;
+            border-color: var(--uv);
+        }
+
+        /* ─── Version Badge ──────────────────────────────────────── */
         .version-badge {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: white;
-            border-radius: 8px;
-            padding: 12px 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            bottom: 16px;
+            right: 16px;
+            background: var(--space-2);
+            border-radius: var(--radius);
+            padding: 10px 14px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             z-index: 9999;
             display: flex;
             align-items: center;
             gap: 10px;
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: var(--font-mono);
             font-weight: 600;
-            font-size: 14px;
-            border: 2px solid;
+            font-size: 12px;
+            border: 1px solid;
+            letter-spacing: 0.06em;
+            text-decoration: none;
+            color: inherit;
         }
 
         .version-badge:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
         }
 
         .version-badge img {
-            width: 32px;
-            height: 32px;
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
         }
 
         .version-badge.temporal {
-            border-color: #00d4ff;
-            color: #000;
+            border-color: var(--uv);
+            color: var(--uv);
         }
 
         .version-badge.pre-temporal {
-            border-color: #8b7355;
-            color: #5c4a3a;
+            border-color: var(--space-4);
+            color: var(--muted);
+        }
+
+        /* ─── Temporal wordmark in header ────────────────────────── */
+        .temporal-wordmark {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--font-mono);
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.12em;
+            color: var(--uv);
+            text-transform: uppercase;
+        }
+
+        .temporal-wordmark::before {
+            content: '';
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--uv);
+            border-radius: 2px;
+            transform: rotate(45deg);
         }
     </style>
 </head>
@@ -842,8 +991,8 @@
         <div class="confirm-content">
             <div class="confirm-message" id="confirmMessage"></div>
             <div class="confirm-buttons">
-                <button class="btn-confirm-yes" id="confirmYes">Yes</button>
-                <button class="btn-confirm-no" onclick="closeConfirmModal()">No</button>
+                <button class="btn-confirm-yes" id="confirmYes">Yes, continue</button>
+                <button class="btn-confirm-no" onclick="closeConfirmModal()">Cancel</button>
             </div>
         </div>
     </div>
@@ -852,8 +1001,12 @@
         <!-- Patient Portal -->
         <div class="panel">
             <div class="panel-header">
-                <span>👤 Patient Portal</span>
-                <button class="btn btn-new-request" onclick="openNewRequestModal()">+ New Request</button>
+                <span class="header-icon">
+                    <!-- person icon -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                    Patient Portal
+                </span>
+                <button class="btn-new-request" onclick="openNewRequestModal()">+ New Request</button>
             </div>
             <div class="panel-content" id="patientPortal">
                 <div class="empty-state">No prescriptions to display</div>
@@ -862,7 +1015,13 @@
 
         <!-- Doctor Portal -->
         <div class="panel">
-            <div class="panel-header">👨‍⚕️ Doctor Portal</div>
+            <div class="panel-header">
+                <span class="header-icon">
+                    <!-- stethoscope-ish icon -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
+                    Doctor Portal
+                </span>
+            </div>
             <div class="panel-content" id="doctorPortal">
                 <div class="empty-state">No approval requests</div>
             </div>
@@ -870,9 +1029,16 @@
 
         <!-- Control Panel -->
         <div class="panel">
-            <div class="panel-header">⚙️ Control Panel</div>
+            <div class="panel-header">
+                <span class="header-icon">
+                    <!-- settings icon -->
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+                    Control Panel
+                </span>
+                <span class="temporal-wordmark">Temporal</span>
+            </div>
             <div class="panel-content">
-                <!-- Admin Actions at Top -->
+                <!-- Admin Actions -->
                 <div class="admin-section">
                     <div class="admin-buttons">
                         <button class="btn btn-admin" onclick="generateLoad()">Generate 20 Rxs</button>
@@ -950,7 +1116,7 @@
                 statusEl.textContent = '⚡ Auto-Process';
                 statusEl.className = 'connection-status auto-mode';
             } else {
-                statusEl.textContent = '🔌 Manual Mode';
+                statusEl.textContent = '● Manual Mode';
                 statusEl.className = 'connection-status connected';
             }
         }
@@ -978,7 +1144,7 @@
                 <strong>Mode:</strong> ${mode}<br>
                 <strong>Status:</strong> Connected<br>
                 <strong>Workflows:</strong> ${workflowText}<br>
-                <em>Click to toggle mode</em>
+                <em style="color: var(--muted)">Click to toggle mode</em>
             `;
             
             tooltip.style.top = (event.clientY + 10) + 'px';
@@ -1036,7 +1202,8 @@
 
         // Render prescriptions
         function renderPrescriptions() {
-            console.log('Prescription statuses:', Object.values(prescriptions).map(p => `${p.patientName}: ${p.status}`));            const container = document.getElementById('patientPortal');
+            console.log('Prescription statuses:', Object.values(prescriptions).map(p => `${p.patientName}: ${p.status}`));
+            const container = document.getElementById('patientPortal');
             const prescriptionList = Object.values(prescriptions).sort((a, b) => 
                 new Date(b.requestedDate) - new Date(a.requestedDate)
             );
@@ -1046,7 +1213,6 @@
                 return;
             }
 
-            // Helper to generate timeline
             function generateTimeline(p) {
                 const steps = [
                     { key: 'validate', name: 'Validate', statuses: ['Validating', 'Validated'] },
@@ -1061,7 +1227,6 @@
                 let isWaiting = p.status === 'Waiting';
                 let approvalSkipped = false;
     
-                // Determine current step and check if approval was skipped
                 if (p.status === 'Pending') {
                     currentStepIndex = -1;
                 } else if (p.status === 'Waiting') {
@@ -1079,7 +1244,6 @@
                     }
                 } else if (p.status === 'Submitting' || p.status === 'Completed') {
                     currentStepIndex = 4;
-                    // If we're at submit/completed and approval wasn't needed, mark it skipped
                     if (!p.approvalNeededReason) {
                         approvalSkipped = true;
                     }
@@ -1088,7 +1252,6 @@
                     failedStep = p.failedStep ?? -1; 
                 }
 
-                // Generate timeline HTML
                 let timelineHTML = '<div class="timeline">';
                 timelineHTML += '<div class="timeline-line"></div>';
                 timelineHTML += '<div class="timeline-steps">';
@@ -1099,57 +1262,49 @@
                     let label = '';
                     let tooltip = step.name;
 
-                    // Check FAILED first, before checking completed
                     if (index === failedStep) {
-                        // Business logic failure (denial or timeout)
                         pipClass += ' failed';
                         icon = '✗';
-    
                         if (p.status === 'ApprovalTimeout') {
                             label = `<div class="timeline-label">Timeout</div>`;
-                            tooltip = `${step.name} - Approval timeout (no response)`;
+                            tooltip = `${step.name} - Approval timeout`;
                         } else {
                             label = `<div class="timeline-label">Denied</div>`;
                             tooltip = `${step.name} - Denied by doctor`;
                         }
                     } else if (approvalSkipped && index === 3) {
-                        // Approval step was skipped
                         pipClass += ' skipped';
                         icon = '⊘';
-                        tooltip = `${step.name} - Not required (refills available)`;
-                    } else if (index < currentStepIndex || (index === currentStepIndex && !(approvalSkipped && index === 3) && p.status.endsWith('ed') && p.status !== 'ApprovalNeeded' && failedStep !== index)) {                        // Completed
+                        tooltip = `${step.name} - Not required`;
+                    } else if (index < currentStepIndex || (index === currentStepIndex && !(approvalSkipped && index === 3) && p.status.endsWith('ed') && p.status !== 'ApprovalNeeded' && failedStep !== index)) {
                         pipClass += ' completed';
                         icon = '✓';
                         tooltip = `${step.name} - Completed`;
                     } else if (index === currentStepIndex) {
-                        // Current step
                         if (isWaiting && index === 0) {
-                            // Special case: waiting for eligibility at validate step
                             pipClass += ' waiting';
                             icon = '⏰';
                             label = `<div class="timeline-label">Not Eligible Yet</div>`;
                             const eligibleDate = new Date(p.eligibleDate);
                             const waitMinutes = Math.round((eligibleDate - new Date()) / 60000);
-                            tooltip = `${step.name} - Waiting ${waitMinutes} min until eligible (${eligibleDate.toLocaleString()})`;
+                            tooltip = `${step.name} - Waiting ${waitMinutes} min`;
                         } else if (p.status === 'ApprovalNeeded' && index === 3) {
-                            // Waiting for doctor approval
                             pipClass += ' waiting';
                             icon = '⏰';
                             label = `<div class="timeline-label">Awaiting Doctor</div>`;
-                            tooltip = `${step.name} - Pending doctor approval`;
+                            tooltip = `${step.name} - Pending approval`;
                         } else if (failedStep === index) {
-                            // This shouldn't happen now since we check failedStep first, but keep as fallback
                             pipClass += ' failed';
                             icon = '✗';
                             label = `<div class="timeline-label">Denied</div>`;
-                            tooltip = `${step.name} - Denied by doctor`;
+                            tooltip = `${step.name} - Denied`;
                         } else {
                             pipClass += ' current';
                             icon = '';
                             label = `<div class="timeline-label">${p.status}</div>`;
-                            tooltip = `${step.name} - In Progress`;                        }
+                            tooltip = `${step.name} - In Progress`;
+                        }
                     } else {
-                        // Future
                         icon = '';
                         tooltip = step.name;
                     }
@@ -1172,39 +1327,38 @@
                 const now = new Date();
                 const isEligible = now >= eligibleDate;
                 const eligibleText = isEligible 
-                    ? `<span style="color: #28a745;">✅ Eligible now</span>` 
-                    : `<span style="color: #ff9800;">⏰ ${eligibleDate.toLocaleDateString()} ${eligibleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
+                    ? `<span style="color: var(--green);">✓ Eligible</span>` 
+                    : `<span style="color: var(--amber);">⏰ ${eligibleDate.toLocaleDateString()} ${eligibleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
     
+                let notifBadge = '';
+                if (p.notificationStatus === 'Retrying') {
+                    notifBadge = `<div class="notif-badge retrying">⚠ Notification retrying...</div>`;
+                } else if (p.notificationStatus === 'Failed') {
+                    notifBadge = `<div class="notif-badge failed">✗ Notification failed permanently</div>`;
+                } else if (p.notificationStatus === 'Sent') {
+                    notifBadge = `<div class="notif-badge sent">✓ Patient notified</div>`;
+                }
+
                 return `
-                        <div class="prescription-card ${
-                            p.status === 'Completed' ? 'status-completed' :
-                            p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'status-denied' :
-                            p.status === 'OnHold' ? 'status-failed' : ''
-                        }">
+                    <div class="prescription-card ${
+                        p.status === 'Completed' ? 'status-completed' :
+                        p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'status-denied' :
+                        p.status === 'OnHold' ? 'status-failed' : ''
+                    }">
                         ${p.copay ? `<div class="copay-badge">$${p.copay.toFixed(2)}</div>` : ''}
                         <h3>${p.patientName}</h3>
                         <div class="medication">${p.medication}</div>
-            
                         <div class="info-row">
-                            <div class="detail">Patient ID: ${p.patientId}</div>
+                            <div class="detail">ID: ${p.patientId}</div>
                             <div class="detail-right">${eligibleText}</div>
                         </div>
-            
                         <div class="info-row">
                             <div class="detail">Refills: ${p.refillsRemaining}</div>
-                            <div class="detail-right">Requested: ${new Date(p.requestedDate).toLocaleDateString()} ${new Date(p.requestedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+                            <div class="detail-right">${new Date(p.requestedDate).toLocaleDateString()} ${new Date(p.requestedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
-            
                         ${generateTimeline(p)}
-                        ${p.status === 'Pending' ? `<div style="margin-top: 8px;"><button class="btn btn-approve" style="width: 100%; padding: 6px;" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button></div>` : ''}
-
-                        ${p.notificationStatus === 'Retrying' ? 
-                            `<div style="margin-top: 8px; padding: 6px; background: #fff3cd; border-left: 3px solid #ffc107; border-radius: 4px; font-size: 11px; color: #856404;">⚠️ Patient notification retrying...</div>` 
-                            : p.notificationStatus === 'Failed' ? 
-                            `<div style="margin-top: 8px; padding: 6px; background: #f8d7da; border-left: 3px solid #dc3545; border-radius: 4px; font-size: 11px; color: #721c24;">❌ Patient notification failed permanently</div>`
-                            : p.notificationStatus === 'Sent' ? 
-                            `<div style="margin-top: 8px; padding: 6px; background: #d4edda; border-left: 3px solid #28a745; border-radius: 4px; font-size: 11px; color: #155724;">✅ Patient notified successfully</div>`
-                            : ''}
+                        ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button>` : ''}
+                        ${notifBadge}
                     </div>
                 `;
             }).join('');
@@ -1280,24 +1434,18 @@
             }).join('');
         }
 
-        // Update endpoint configuration
         async function updateConfig(endpoint, property, value) {
             const config = endpointConfigs[endpoint];
-            
             if (property === 'completeOutage') {
                 config[property] = value;
             } else {
                 config[property] = parseInt(value);
             }
-
-            // Update display
             if (property === 'failureRatePercent') {
                 document.getElementById(`${endpoint}-failure`).textContent = `${value}%`;
             } else if (property === 'latencyMs') {
                 document.getElementById(`${endpoint}-latency`).textContent = `${value}ms`;
             }
-
-            // Send to server
             await fetch(`/api/config/${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1305,36 +1453,27 @@
             });
         }
 
-        // Handle approval - now sends signal to Temporal workflow
         async function handleApproval(approvalId, approved) {
-            await fetch(`/api/approve/${approvalId}?approved=${approved}`, {
-                method: 'POST'
-            });
+            await fetch(`/api/approve/${approvalId}?approved=${approved}`, { method: 'POST' });
         }
 
-        // Clear logs
         function clearLogs() {
             document.getElementById('logsContainer').innerHTML = '';
         }
 
-        // Generate load
         async function generateLoad() {
             await fetch('/api/admin/generate-load', { method: 'POST' });
-
-            // If in auto mode, wait a moment for prescriptions to load, then process them
             if (autoProcessMode) {
                 setTimeout(async () => {
                     const pendingPrescriptions = Object.values(prescriptions).filter(p => p.status === 'Pending');
                     for (const p of pendingPrescriptions) {
                         await processWorkflow(p.id);
-                        // Small delay between starts to avoid overwhelming
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 }, 1000);
             }
         }
 
-        // Confirmation modal helpers
         function showConfirm(message, onConfirm) {
             document.getElementById('confirmMessage').textContent = message;
             document.getElementById('confirmYes').onclick = () => {
@@ -1348,22 +1487,15 @@
             document.getElementById('confirmModal').classList.remove('show');
         }
 
-        // Reset everything
         async function resetEverything() {
             showConfirm('This will reset all data and configurations. Continue?', async () => {
-                // Clear local state
                 autoProcessMode = false;
                 updateConnectionStatus();
-
                 prescriptions = {};
                 approvals = {};
-
-                // Reset configs
                 Object.keys(endpointConfigs).forEach(key => {
                     endpointConfigs[key] = { failureRatePercent: 0, latencyMs: 0, completeOutage: false };
                 });
-
-                // Send reset configs to server
                 for (const endpoint of Object.keys(endpointConfigs)) {
                     await fetch(`/api/config/${endpoint}`, {
                         method: 'POST',
@@ -1371,25 +1503,15 @@
                         body: JSON.stringify(endpointConfigs[endpoint])
                     });
                 }
-
-                // Call server reset endpoint
                 await fetch('/api/admin/reset', { method: 'POST' });
-
-                // Clear logs
                 clearLogs();
-
-                // Reload fresh data
                 await loadPrescriptions();
                 await loadApprovals();
-        
-                // Re-render everything
                 renderConfigs();
             });
         }
 
-        // Modal functions
         function openNewRequestModal() {
-            // Random names
             const firstNames = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara", 
                                 "David", "Elizabeth", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen"];
             const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
@@ -1397,20 +1519,12 @@
             
             const randomName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
             document.getElementById('patientName').value = randomName;
-            
-            // Random medication
             const medications = document.getElementById('medication').options;
-            const randomMedIndex = Math.floor(Math.random() * medications.length);
-            document.getElementById('medication').selectedIndex = randomMedIndex;
-            
-            // Random refills (0-12)
+            document.getElementById('medication').selectedIndex = Math.floor(Math.random() * medications.length);
             document.getElementById('refills').value = Math.floor(Math.random() * 13);
-            
-            // Set default eligible date to now
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             document.getElementById('eligibleDate').value = now.toISOString().slice(0, 16);
-            
             document.getElementById('newRequestModal').classList.add('show');
         }
 
@@ -1424,61 +1538,39 @@
             const eligibleDate = document.getElementById('eligibleDate').value;
             const refills = parseInt(document.getElementById('refills').value);
 
-            if (!patientName) {
-                alert('Please enter a patient name');
-                return;
-            }
+            if (!patientName) { alert('Please enter a patient name'); return; }
 
-            // Create new prescription
             const prescription = {
                 id: 'P' + Date.now(),
                 patientId: 'PAT' + Math.random().toString(36).substr(2, 9),
-                patientName: patientName,
-                medication: medication,
+                patientName,
+                medication,
                 eligibleDate: new Date(eligibleDate).toISOString(),
                 refillsRemaining: refills,
                 status: 'Pending',
                 requestedDate: new Date().toISOString()
             };
 
-            // Save to backend
             await fetch('/api/prescriptions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(prescription)
             });
 
-            // Add to local state and render
             prescriptions[prescription.id] = prescription;
             renderPrescriptions();
-    
             closeModal();
-    
-            // Auto-process if in auto mode
-            if (autoProcessMode) {
-                await processWorkflow(prescription.id);
-            }
+            if (autoProcessMode) await processWorkflow(prescription.id);
         }
 
-        // Process workflow using Temporal
         async function processWorkflow(prescriptionId) {
             activeWorkflows++;
             updateConnectionStatus();
-    
             try {
-                // Start Temporal workflow
-                const response = await fetch(`/api/workflow/start/${prescriptionId}`, { 
-                    method: 'POST' 
-                });
-        
-                if (!response.ok) {
-                    throw new Error('Failed to start workflow');
-                }
-        
+                const response = await fetch(`/api/workflow/start/${prescriptionId}`, { method: 'POST' });
+                if (!response.ok) throw new Error('Failed to start workflow');
                 const result = await response.json();
                 console.log('Temporal workflow started:', result.workflowId);
-        
-                // Workflow runs asynchronously - updates come via SignalR
             } catch (error) {
                 console.error('Failed to start workflow:', error);
                 renderPrescriptions();
@@ -1488,7 +1580,6 @@
             }
         }
 
-        // Start the app
         startConnection();
     </script>
 </body>
