@@ -876,6 +876,65 @@
             border-color: var(--uv);
         }
 
+        /* ─── Feature Flags ──────────────────────────────────────── */
+        .feature-flags-section {
+            margin-bottom: 14px;
+            padding-bottom: 14px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .feature-flags-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .feature-flag-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 12px;
+            background: var(--space-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 6px;
+        }
+
+        .feature-flag-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .feature-flag-name {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--off-white);
+        }
+
+        .feature-flag-desc {
+            font-size: 10px;
+            color: var(--muted);
+            font-family: var(--font-mono);
+        }
+
+        .restart-notice {
+            margin-top: 6px;
+            padding: 6px 10px;
+            background: var(--amber-bg);
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-radius: var(--radius-sm);
+            font-size: 10px;
+            color: var(--amber);
+            font-family: var(--font-mono);
+            display: none;
+        }
+
+        .restart-notice.show { display: block; }
+
         /* ─── Version Badge ──────────────────────────────────────── */
         .version-badge {
             position: fixed;
@@ -1046,6 +1105,24 @@
                     </div>
                 </div>
 
+                <!-- Feature Flags -->
+                <div class="feature-flags-section">
+                    <div class="feature-flags-title">Feature Flags</div>
+                    <div class="feature-flag-row">
+                        <div class="feature-flag-info">
+                            <span class="feature-flag-name">Payload Encryption</span>
+                            <span class="feature-flag-desc" id="encryptionDesc">Loading...</span>
+                        </div>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="encryptionToggle" onchange="toggleEncryption(this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="restart-notice" id="encryptionRestartNotice">
+                        ⚠ Restart both Api &amp; Worker to apply this change
+                    </div>
+                </div>
+
                 <!-- Endpoint Configurations -->
                 <div id="endpointConfigs"></div>
 
@@ -1100,6 +1177,7 @@
                 await loadPrescriptions();
                 await loadApprovals();
                 await loadConfigs();
+                await loadFeatureFlags();
             } catch (err) {
                 console.error(err);
                 document.getElementById('connectionStatus').textContent = 'Disconnected';
@@ -1176,6 +1254,36 @@
             approvals[approval.id] = approval;
             renderApprovals();
         });
+
+        // Feature flags
+        async function loadFeatureFlags() {
+            const response = await fetch('/api/config/features');
+            const data = await response.json();
+            const toggle = document.getElementById('encryptionToggle');
+            const desc = document.getElementById('encryptionDesc');
+            toggle.checked = data.enableEncryption;
+            desc.textContent = data.enableEncryption
+                ? 'ON — PII encrypted in Temporal history'
+                : 'OFF — PII visible in Temporal history';
+            desc.style.color = data.enableEncryption ? 'var(--green)' : 'var(--muted)';
+        }
+
+        async function toggleEncryption(enabled) {
+            const desc = document.getElementById('encryptionDesc');
+            const notice = document.getElementById('encryptionRestartNotice');
+
+            await fetch('/api/config/features', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enableEncryption: enabled })
+            });
+
+            desc.textContent = enabled
+                ? 'ON — PII encrypted in Temporal history'
+                : 'OFF — PII visible in Temporal history';
+            desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
+            notice.classList.add('show');
+        }
 
         // Load data from API
         async function loadPrescriptions() {

@@ -1,8 +1,10 @@
 using PBMAdjudication.Worker;
 using PBMAdjudication.Core;
+using PBMAdjudication.Core.Codec;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Temporalio.Client;
+using Temporalio.Converters;
 
 namespace PBMAdjudicationService
 {
@@ -11,14 +13,33 @@ namespace PBMAdjudicationService
         public static async Task Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
+            builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 
             var connectionString = builder.Configuration.GetConnectionString("Postgres")
                 ?? throw new InvalidOperationException("Postgres connection string not found");
 
             builder.Services.AddHttpClient();
+
+            // ── Codec / DataConverter setup ──────────────────────────────────────
+            var enableEncryption = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
+            DataConverter dataConverter;
+            if (enableEncryption)
+            {
+                var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
+                dataConverter = DataConverter.Default with { PayloadCodec = new EncryptionCodec(keyBase64) };
+            }
+            else
+            {
+                dataConverter = DataConverter.Default;
+            }
+            // ────────────────────────────────────────────────────────────────────
+
             builder.Services.AddSingleton<ITemporalClient>(sp =>
             {
-                return TemporalClient.ConnectAsync(new("localhost:7233")).Result;
+                return TemporalClient.ConnectAsync(new TemporalClientConnectOptions("localhost:7233")
+                {
+                    DataConverter = dataConverter
+                }).Result;
             });
 
             builder.Services.AddSingleton<IPrescriptionRepository>(
@@ -70,6 +91,32 @@ namespace PBMAdjudicationService
             {
                 var approvals = await repo.GetPendingApprovalRequestsAsync();
                 return Results.Ok(approvals);
+            });
+
+            // Feature flags
+            app.MapGet("/api/config/features", (IConfiguration config) =>
+            {
+                var enableEncryption = config.GetValue<bool>("Temporal:EnableEncryption");
+                return Results.Ok(new { enableEncryption });
+            });
+
+            app.MapPost("/api/config/features", async (FeatureFlagsUpdate update) =>
+            {
+                // Update appsettings.json on disk so the change persists across restarts.
+                // Note: the running process will NOT pick this up until restarted.
+                var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
+                var json = await File.ReadAllTextAsync(appSettingsPath);
+                var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
+
+                if (root["Temporal"] is System.Text.Json.Nodes.JsonObject temporal)
+                    temporal["EnableEncryption"] = update.EnableEncryption;
+                else
+                    root["Temporal"] = new System.Text.Json.Nodes.JsonObject { ["EnableEncryption"] = update.EnableEncryption };
+
+                var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+                await File.WriteAllTextAsync(appSettingsPath, root.ToJsonString(options));
+
+                return Results.Ok(new { saved = true, restartRequired = true });
             });
 
             app.MapGet("/api/config", async (IPrescriptionRepository repo) =>
@@ -505,3 +552,5 @@ namespace PBMAdjudicationService
         }
     }
 }
+
+public record FeatureFlagsUpdate(bool EnableEncryption);

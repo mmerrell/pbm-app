@@ -43,6 +43,10 @@ ScaffoldingReadMe.txt
 *~
 CodeCoverage/
 
+# Local secrets (never commit)
+appsettings.Local.json
+appsettings.*.Local.json
+
 # MSBuild Binary and Structured Log
 *.binlog
 
