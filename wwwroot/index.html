@@ -719,6 +719,10 @@
         input:checked + .toggle-slider { background: var(--red); }
         input:checked + .toggle-slider:before { transform: translateX(20px); }
 
+        /* Feature flag toggles: unchecked = red (off), checked = green (on) */
+        .feature-flag-toggle .toggle-slider { background: var(--red); }
+        .feature-flag-toggle input:checked + .toggle-slider { background: var(--green); }
+
         /* ─── Logs ───────────────────────────────────────────────── */
         .logs-section { margin-top: 14px; }
 
@@ -921,19 +925,6 @@
             font-family: var(--font-mono);
         }
 
-        .restart-notice {
-            margin-top: 6px;
-            padding: 6px 10px;
-            background: var(--amber-bg);
-            border: 1px solid rgba(245, 158, 11, 0.25);
-            border-radius: var(--radius-sm);
-            font-size: 10px;
-            color: var(--amber);
-            font-family: var(--font-mono);
-            display: none;
-        }
-
-        .restart-notice.show { display: block; }
 
         /* ─── Version Badge ──────────────────────────────────────── */
         .version-badge {
@@ -1113,14 +1104,12 @@
                             <span class="feature-flag-name">Payload Encryption</span>
                             <span class="feature-flag-desc" id="encryptionDesc">Loading...</span>
                         </div>
-                        <label class="toggle-switch">
+                        <label class="toggle-switch feature-flag-toggle">
                             <input type="checkbox" id="encryptionToggle" onchange="toggleEncryption(this.checked)">
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-                    <div class="restart-notice" id="encryptionRestartNotice">
-                        ⚠ Restart both Api &amp; Worker to apply this change
-                    </div>
+
                 </div>
 
                 <!-- Endpoint Configurations -->
@@ -1270,7 +1259,6 @@
 
         async function toggleEncryption(enabled) {
             const desc = document.getElementById('encryptionDesc');
-            const notice = document.getElementById('encryptionRestartNotice');
 
             await fetch('/api/config/features', {
                 method: 'POST',
@@ -1282,7 +1270,6 @@
                 ? 'ON — PII encrypted in Temporal history'
                 : 'OFF — PII visible in Temporal history';
             desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
-            notice.classList.add('show');
         }
 
         // Load data from API

@@ -21,17 +21,16 @@ namespace PBMAdjudicationService
             builder.Services.AddHttpClient();
 
             // ── Codec / DataConverter setup ──────────────────────────────────────
-            var enableEncryption = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
-            DataConverter dataConverter;
-            if (enableEncryption)
-            {
-                var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
-                dataConverter = DataConverter.Default with { PayloadCodec = new EncryptionCodec(keyBase64) };
-            }
-            else
-            {
-                dataConverter = DataConverter.Default;
-            }
+            // DynamicEncryptionCodec allows hot-swapping encryption without restart.
+            // The codec is registered as a singleton so the feature flag endpoint
+            // can flip it live on the same instance the TemporalClient is using.
+            var initiallyEnabled = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
+            var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
+            var dynamicCodec = new DynamicEncryptionCodec(keyBase64, initiallyEnabled);
+
+            builder.Services.AddSingleton(dynamicCodec);
+
+            var dataConverter = DataConverter.Default with { PayloadCodec = dynamicCodec };
             // ────────────────────────────────────────────────────────────────────
 
             builder.Services.AddSingleton<ITemporalClient>(sp =>
@@ -94,29 +93,17 @@ namespace PBMAdjudicationService
             });
 
             // Feature flags
-            app.MapGet("/api/config/features", (IConfiguration config) =>
+            app.MapGet("/api/config/features", (DynamicEncryptionCodec codec) =>
             {
-                var enableEncryption = config.GetValue<bool>("Temporal:EnableEncryption");
-                return Results.Ok(new { enableEncryption });
+                return Results.Ok(new { enableEncryption = codec.IsEnabled });
             });
 
-            app.MapPost("/api/config/features", async (FeatureFlagsUpdate update) =>
+            app.MapPost("/api/config/features", (FeatureFlagsUpdate update, DynamicEncryptionCodec codec) =>
             {
-                // Update appsettings.json on disk so the change persists across restarts.
-                // Note: the running process will NOT pick this up until restarted.
-                var appSettingsPath = Path.Combine(AppContext.BaseDirectory, "appsettings.json");
-                var json = await File.ReadAllTextAsync(appSettingsPath);
-                var root = System.Text.Json.Nodes.JsonNode.Parse(json)!.AsObject();
-
-                if (root["Temporal"] is System.Text.Json.Nodes.JsonObject temporal)
-                    temporal["EnableEncryption"] = update.EnableEncryption;
-                else
-                    root["Temporal"] = new System.Text.Json.Nodes.JsonObject { ["EnableEncryption"] = update.EnableEncryption };
-
-                var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
-                await File.WriteAllTextAsync(appSettingsPath, root.ToJsonString(options));
-
-                return Results.Ok(new { saved = true, restartRequired = true });
+                // Hot-swap: flip the flag on the live singleton codec instance.
+                // No restart required — new workflows immediately use the new setting.
+                codec.SetEnabled(update.EnableEncryption);
+                return Results.Ok(new { saved = true, restartRequired = false });
             });
 
             app.MapGet("/api/config", async (IPrescriptionRepository repo) =>
