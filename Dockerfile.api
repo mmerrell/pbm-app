@@ -1,0 +1,31 @@
+# ── Build stage ───────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+WORKDIR /src
+
+# Copy solution and project files first for layer caching on restore
+COPY PBMAdjudicationService.sln ./
+COPY PBMAdjudicationService.csproj ./
+COPY PBMAdjudication.Core/PBMAdjudication.Core.csproj ./PBMAdjudication.Core/
+COPY PBMAdjudicationService.Worker/PBMAdjudicationService.Worker.csproj ./PBMAdjudicationService.Worker/
+
+RUN dotnet restore PBMAdjudicationService.sln
+
+# Copy all source after restore so code changes don't bust the restore cache
+COPY . .
+
+RUN dotnet publish PBMAdjudicationService.csproj \
+    -c Release \
+    -o /app/api
+
+# ── Runtime stage ──────────────────────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+WORKDIR /app
+
+COPY --from=build /app/api .
+
+ENV ASPNETCORE_URLS=http://+:5002
+ENV ASPNETCORE_ENVIRONMENT=Production
+
+EXPOSE 5002
+
+ENTRYPOINT ["dotnet", "PBMAdjudicationService.dll"]

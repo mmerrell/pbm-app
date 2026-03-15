@@ -33,9 +33,10 @@ namespace PBMAdjudicationService
             var dataConverter = DataConverter.Default with { PayloadCodec = dynamicCodec };
             // ────────────────────────────────────────────────────────────────────
 
+            var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";
             builder.Services.AddSingleton<ITemporalClient>(sp =>
             {
-                return TemporalClient.ConnectAsync(new TemporalClientConnectOptions("localhost:7233")
+                return TemporalClient.ConnectAsync(new TemporalClientConnectOptions(temporalHost)
                 {
                     DataConverter = dataConverter
                 }).Result;
@@ -430,8 +431,16 @@ namespace PBMAdjudicationService
             // Reset
             app.MapPost("/api/admin/reset", async (
                 IPrescriptionRepository repo,
+                [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
             {
+                // Terminate all running workflows before resetting DB
+                await foreach (var wf in client.ListWorkflowsAsync("ExecutionStatus = 'Running'"))
+                {
+                    try { await client.GetWorkflowHandle(wf.Id).TerminateAsync("Reset All triggered"); }
+                    catch { /* best-effort — ignore if already completed */ }
+                }
+
                 await repo.ResetAsync();
 
                 var prescriptions = await repo.GetAllPrescriptionsAsync();
@@ -462,16 +471,23 @@ namespace PBMAdjudicationService
                 };
 
                 var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
-                await client.StartWorkflowAsync(
-                    (PrescriptionWorkflow wf) => wf.RunAsync(input),
-                    new WorkflowOptions
-                    {
-                        Id = workflowId,
-                        TaskQueue = "prescription-task-queue"
-                    });
-
-                await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"🚀 [temporal] Started workflow for {prescription.PatientName}");
+                try
+                {
+                    await client.StartWorkflowAsync(
+                        (PrescriptionWorkflow wf) => wf.RunAsync(input),
+                        new WorkflowOptions
+                        {
+                            Id = workflowId,
+                            TaskQueue = "prescription-task-queue"
+                        });
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"🚀 [temporal] Started workflow for {prescription.PatientName}");
+                }
+                catch (Temporalio.Exceptions.WorkflowAlreadyStartedException)
+                {
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"⚡ [temporal] Workflow already running for {prescription.PatientName} — attaching");
+                }
 
                 return Results.Ok(new { workflowId });
             });

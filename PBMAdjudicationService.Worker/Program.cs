@@ -10,28 +10,24 @@ using Microsoft.Extensions.Configuration;
 
 var builder = Host.CreateApplicationBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddHttpClient();
 
 // ── Codec / DataConverter setup ──────────────────────────────────────────────
 var enableEncryption = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
+var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
+var dynamicCodec = new DynamicEncryptionCodec(keyBase64, enableEncryption);
+var dataConverter = DataConverter.Default with { PayloadCodec = dynamicCodec };
 
-DataConverter dataConverter;
-if (enableEncryption)
-{
-    var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
-    dataConverter = DataConverter.Default with { PayloadCodec = new EncryptionCodec(keyBase64) };
-    Console.WriteLine("[Codec] Payload encryption ENABLED — PII will be opaque in Temporal UI");
-}
-else
-{
-    dataConverter = DataConverter.Default;
-    Console.WriteLine("[Codec] Payload encryption DISABLED — data visible in Temporal UI");
-}
+Console.WriteLine(enableEncryption
+    ? "[Codec] Payload encryption ENABLED — PII will be opaque in Temporal UI"
+    : "[Codec] Payload encryption DISABLED — data visible in Temporal UI");
 // ─────────────────────────────────────────────────────────────────────────────
 
+var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";
 builder.Services.AddSingleton<ITemporalClient>(sp =>
 {
-    return TemporalClient.ConnectAsync(new TemporalClientConnectOptions("localhost:7233")
+    return TemporalClient.ConnectAsync(new TemporalClientConnectOptions(temporalHost)
     {
         DataConverter = dataConverter
     }).Result;

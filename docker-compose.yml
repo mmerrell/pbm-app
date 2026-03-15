@@ -1,0 +1,98 @@
+services:
+
+  # ── Postgres ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    networks:
+      - pbm-net
+    environment:
+      POSTGRES_DB: pbm_adjudication
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── Temporal Server ───────────────────────────────────────────────────────
+  temporal:
+    image: temporalio/auto-setup:latest
+    networks:
+      - pbm-net
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PWD=postgres
+      - POSTGRES_SEEDS=postgres
+    ports:
+      - "7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ── Temporal UI ───────────────────────────────────────────────────────────
+  temporal-ui:
+    image: temporalio/ui:latest
+    networks:
+      - pbm-net
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:5002
+    ports:
+      - "8233:8080"
+    depends_on:
+      - temporal
+
+  # ── PBM Api ───────────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    networks:
+      - pbm-net
+    ports:
+      - "5002:5002"
+    environment:
+      - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=pbm_adjudication;Username=postgres;Password=postgres
+      - Temporal__Host=temporal:7233
+      - Temporal__EnableEncryption=false
+      - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
+      - BaseUrl=http://localhost:5002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+
+  # ── PBM Worker ────────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    networks:
+      - pbm-net
+    environment:
+      - Temporal__Host=temporal:7233
+      - Temporal__EnableEncryption=false
+      - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
+      - BaseUrl=http://api:5002
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+      api:
+        condition: service_started
+
+networks:
+  pbm-net:
+    driver: bridge
+
+volumes:
+  postgres-data:

@@ -46,6 +46,7 @@ CodeCoverage/
 # Local secrets (never commit)
 appsettings.Local.json
 appsettings.*.Local.json
+.env
 
 # MSBuild Binary and Structured Log
 *.binlog
