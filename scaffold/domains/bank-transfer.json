@@ -1,0 +1,128 @@
+{
+  "_comment": "Bank Wire Transfer — compliance & fraud screening workflow",
+
+  "tier1": {
+    "projectSlug":       "bank-transfer",
+    "projectTitle":      "Wire Transfer Processing System",
+    "namespace":         "BankTransfer",
+    "serviceNamespace":  "BankTransferService",
+    "workerNamespace":   "BankTransfer.Worker",
+    "coreNamespace":     "BankTransfer.Core",
+    "dbName":            "bank_transfer",
+    "taskQueue":         "transfer-task-queue",
+    "worflowIdPrefix":   "transfer",
+    "port":              "5002",
+    "accentColor":       "#0EA5E9"
+  },
+
+  "tier2": {
+    "entitySingular":        "Transfer",
+    "entityPlural":          "Transfers",
+    "entitySingularLower":   "transfer",
+    "entityPluralLower":     "transfers",
+
+    "portal1Title":          "Customer Portal",
+    "portal2Title":          "Compliance Portal",
+    "portal1Actor":          "Customer",
+    "portal2Actor":          "Compliance Officer",
+    "portal1ActorLower":     "customer",
+    "portal2ActorLower":     "compliance",
+
+    "itemField":             "Destination",
+    "itemFieldLower":        "destination",
+    "itemFieldLabel":        "Destination Account",
+    "valueField":            "Amount",
+    "valueFieldLower":       "amount",
+    "valueFieldLabel":       "Transfer Amount",
+    "valuePrefix":           "$",
+    "valueSuffix":           "",
+
+    "eligibilityField":      "ScheduledDate",
+    "eligibilityFieldLower": "scheduledDate",
+    "eligibilityLabel":      "Scheduled Date",
+
+    "quotaField":            "DailyLimitRemaining",
+    "quotaFieldLower":       "dailyLimitRemaining",
+    "quotaLabel":            "Daily Limit Remaining",
+    "quotaZeroMeansApproval": true,
+
+    "approvalActor":         "Compliance Officer",
+    "approvalActorLower":    "compliance",
+    "approvalActorName":     "Compliance Team",
+
+    "steps": [
+      { "key": "validate",   "label": "KYC Verification",        "apiRoute": "validate",    "logPrefix": "kyc"        },
+      { "key": "authorize",  "label": "Fraud Screening",         "apiRoute": "authorize",   "logPrefix": "fraud"      },
+      { "key": "adjudicate", "label": "Fee Calculation",         "apiRoute": "adjudicate",  "logPrefix": "fees"       },
+      { "key": "approval",   "label": "Compliance Hold",         "apiRoute": "request-approval", "logPrefix": "compliance" },
+      { "key": "submit",     "label": "Submit to SWIFT",         "apiRoute": "submit",      "logPrefix": "swift"      }
+    ]
+  },
+
+  "tier3": {
+    "seedRecords": [
+      {
+        "patientId": "C001",
+        "patientName": "Acme Corp",
+        "item": "HSBC London — GB29NWBK60161331926819",
+        "eligibleOffsetMinutes": 2,
+        "quota": 3
+      },
+      {
+        "patientId": "C002",
+        "patientName": "GlobalTech Inc",
+        "item": "Deutsche Bank — DE89370400440532013000",
+        "eligibleOffsetMinutes": -1440,
+        "quota": 2
+      },
+      {
+        "patientId": "C003",
+        "patientName": "NovaCorp LLC",
+        "item": "BNP Paribas — FR7630006000011234567890189",
+        "eligibleOffsetMinutes": 20,
+        "quota": 1
+      },
+      {
+        "patientId": "C004",
+        "patientName": "Meridian Partners",
+        "item": "Citibank NY — US12345678901234567890",
+        "eligibleOffsetMinutes": -7200,
+        "quota": 0
+      },
+      {
+        "patientId": "C005",
+        "patientName": "Apex Financial",
+        "item": "Barclays — GB60BARC20000055779911",
+        "eligibleOffsetMinutes": -4320,
+        "quota": 1
+      }
+    ],
+
+    "loadGenItems": [
+      "HSBC London", "Deutsche Bank", "BNP Paribas",
+      "Citibank NY", "Barclays", "Santander", "ING Group"
+    ],
+    "loadGenItemSuffixes": [
+      "— USD", "— EUR", "— GBP", "— JPY", "— CHF"
+    ],
+
+    "loadGenActorFirstNames": [
+      "Acme Corp", "GlobalTech Inc", "NovaCorp LLC", "Meridian Partners",
+      "Apex Financial", "Vertex Holdings", "Zenith Capital",
+      "Summit Ventures", "Horizon Group", "Crestline Advisors"
+    ],
+    "loadGenActorLastNames": [
+      "", "", "", "", "", "", "", "", "", ""
+    ],
+
+    "newRequestItemOptions": [
+      "HSBC London — GB29NWBK60161331926819",
+      "Deutsche Bank — DE89370400440532013000",
+      "BNP Paribas — FR7630006000011234567890189",
+      "Citibank NY — US12345678901234567890",
+      "Barclays — GB60BARC20000055779911",
+      "Santander — ES9121000418450200051332",
+      "ING Group — NL91ABNA0417164300"
+    ]
+  }
+}

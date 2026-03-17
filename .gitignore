@@ -59,3 +59,5 @@ appsettings.*.Local.json
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+
+.DS_Store

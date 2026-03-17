@@ -1,0 +1,126 @@
+{
+  "_comment": "PBM Adjudication — reference domain config (the source template)",
+
+  "tier1": {
+    "projectSlug":       "pbm-adjudication",
+    "projectTitle":      "PBM Adjudication System",
+    "namespace":         "PBMAdjudication",
+    "serviceNamespace":  "PBMAdjudicationService",
+    "workerNamespace":   "PBMAdjudication.Worker",
+    "coreNamespace":     "PBMAdjudication.Core",
+    "dbName":            "pbm_adjudication",
+    "taskQueue":         "prescription-task-queue",
+    "worflowIdPrefix":   "prescription",
+    "port":              "5002",
+    "accentColor":       "#444CE7"
+  },
+
+  "tier2": {
+    "entitySingular":        "Prescription",
+    "entityPlural":          "Prescriptions",
+    "entitySingularLower":   "prescription",
+    "entityPluralLower":     "prescriptions",
+
+    "portal1Title":          "Patient Portal",
+    "portal2Title":          "Doctor Portal",
+    "portal1Actor":          "Patient",
+    "portal2Actor":          "Doctor",
+    "portal1ActorLower":     "patient",
+    "portal2ActorLower":     "doctor",
+
+    "itemField":             "Medication",
+    "itemFieldLower":        "medication",
+    "itemFieldLabel":        "Medication",
+    "valueField":            "Copay",
+    "valueFieldLower":       "copay",
+    "valueFieldLabel":       "Copay",
+    "valuePrefix":           "$",
+    "valueSuffix":           "",
+
+    "eligibilityField":      "EligibleDate",
+    "eligibilityFieldLower": "eligibleDate",
+    "eligibilityLabel":      "Eligible Date",
+
+    "quotaField":            "RefillsRemaining",
+    "quotaFieldLower":       "refillsRemaining",
+    "quotaLabel":            "Refills Remaining",
+    "quotaZeroMeansApproval": true,
+
+    "approvalActor":         "Doctor",
+    "approvalActorLower":    "doctor",
+    "approvalActorName":     "Dr. Smith",
+
+    "steps": [
+      { "key": "validate",   "label": "Validate Eligibility",  "apiRoute": "validate",    "logPrefix": "validate"   },
+      { "key": "authorize",  "label": "Prior Authorization",    "apiRoute": "authorize",   "logPrefix": "authorize"  },
+      { "key": "adjudicate", "label": "Adjudicate Claim",       "apiRoute": "adjudicate",  "logPrefix": "adjudicate" },
+      { "key": "approval",   "label": "Doctor Approval",        "apiRoute": "request-approval", "logPrefix": "approval" },
+      { "key": "submit",     "label": "Submit to Pharmacy",     "apiRoute": "submit",      "logPrefix": "submit"     }
+    ]
+  },
+
+  "tier3": {
+    "seedRecords": [
+      {
+        "patientId": "P001",
+        "patientName": "Michael Davis",
+        "item": "Omeprazole 20mg",
+        "eligibleOffsetMinutes": 2,
+        "quota": 5
+      },
+      {
+        "patientId": "P002",
+        "patientName": "John Smith",
+        "item": "Lipitor 20mg",
+        "eligibleOffsetMinutes": -1440,
+        "quota": 3
+      },
+      {
+        "patientId": "P003",
+        "patientName": "Mary Johnson",
+        "item": "Metformin 500mg",
+        "eligibleOffsetMinutes": 20,
+        "quota": 2
+      },
+      {
+        "patientId": "P004",
+        "patientName": "Robert Williams",
+        "item": "Lisinopril 10mg",
+        "eligibleOffsetMinutes": -7200,
+        "quota": 0
+      },
+      {
+        "patientId": "P005",
+        "patientName": "Patricia Brown",
+        "item": "Atorvastatin 40mg",
+        "eligibleOffsetMinutes": -4320,
+        "quota": 1
+      }
+    ],
+
+    "loadGenItems": [
+      "Lipitor", "Metformin", "Lisinopril", "Atorvastatin",
+      "Omeprazole", "Amlodipine", "Simvastatin"
+    ],
+    "loadGenItemSuffixes": ["10mg", "20mg", "40mg", "500mg", "5mg", "80mg"],
+
+    "loadGenActorFirstNames": [
+      "James", "Mary", "John", "Patricia", "Robert",
+      "Jennifer", "Michael", "Linda", "William", "Barbara"
+    ],
+    "loadGenActorLastNames": [
+      "Smith", "Johnson", "Williams", "Brown", "Jones",
+      "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"
+    ],
+
+    "newRequestItemOptions": [
+      "Lipitor 20mg",
+      "Metformin 500mg",
+      "Lisinopril 10mg",
+      "Atorvastatin 40mg",
+      "Omeprazole 20mg",
+      "Amlodipine 5mg",
+      "Simvastatin 20mg"
+    ]
+  }
+}
