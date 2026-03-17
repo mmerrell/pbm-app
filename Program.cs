@@ -21,16 +21,33 @@ namespace PBMAdjudicationService
             builder.Services.AddHttpClient();
 
             // ── Codec / DataConverter setup ──────────────────────────────────────
-            // DynamicEncryptionCodec allows hot-swapping encryption without restart.
-            // The codec is registered as a singleton so the feature flag endpoint
-            // can flip it live on the same instance the TemporalClient is using.
-            var initiallyEnabled = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
-            var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
-            var dynamicCodec = new DynamicEncryptionCodec(keyBase64, initiallyEnabled);
+            // Two independently toggleable codecs stacked in a CompositePayloadCodec.
+            //
+            // Encode order:  ClaimCheck → Encryption
+            //   Large payloads are offloaded first; the resulting small token is
+            //   then encrypted so even the reference is opaque in Temporal history.
+            //
+            // Decode order:  Encryption → ClaimCheck  (CompositePayloadCodec reverses)
+            //   Encryption is stripped first to reveal the token, then the token is
+            //   resolved back to the original bytes.
+            //
+            // Both codecs are singletons so the feature-flag endpoint can flip them
+            // live on the same instances the TemporalClient is using — no restart needed.
 
-            builder.Services.AddSingleton(dynamicCodec);
+            var initiallyEncrypted  = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
+            var initiallyClaimCheck = builder.Configuration.GetValue<bool>("Temporal:EnableClaimCheck");
+            var keyBase64           = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
+            var claimCheckStorePath = builder.Configuration["Temporal:ClaimCheckStorePath"] ?? "/tmp/claim-check";
 
-            var dataConverter = DataConverter.Default with { PayloadCodec = dynamicCodec };
+            var dynamicEncryptionCodec = new DynamicEncryptionCodec(keyBase64, initiallyEncrypted);
+            var dynamicClaimCheckCodec = new DynamicClaimCheckCodec(
+                new FileSystemClaimCheckStore(claimCheckStorePath), initiallyClaimCheck);
+
+            builder.Services.AddSingleton(dynamicEncryptionCodec);
+            builder.Services.AddSingleton(dynamicClaimCheckCodec);
+
+            var compositeCodec = new CompositePayloadCodec(dynamicClaimCheckCodec, dynamicEncryptionCodec);
+            var dataConverter  = DataConverter.Default with { PayloadCodec = compositeCodec };
             // ────────────────────────────────────────────────────────────────────
 
             var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";
@@ -94,18 +111,25 @@ namespace PBMAdjudicationService
             });
 
             // Feature flags
-            app.MapGet("/api/config/features", (DynamicEncryptionCodec codec) =>
-            {
-                return Results.Ok(new { enableEncryption = codec.IsEnabled });
-            });
+            app.MapGet("/api/config/features",
+                (DynamicEncryptionCodec encCodec, DynamicClaimCheckCodec ccCodec) =>
+                {
+                    return Results.Ok(new
+                    {
+                        enableEncryption = encCodec.IsEnabled,
+                        enableClaimCheck = ccCodec.IsEnabled
+                    });
+                });
 
-            app.MapPost("/api/config/features", (FeatureFlagsUpdate update, DynamicEncryptionCodec codec) =>
-            {
-                // Hot-swap: flip the flag on the live singleton codec instance.
-                // No restart required — new workflows immediately use the new setting.
-                codec.SetEnabled(update.EnableEncryption);
-                return Results.Ok(new { saved = true, restartRequired = false });
-            });
+            app.MapPost("/api/config/features",
+                (FeatureFlagsUpdate update, DynamicEncryptionCodec encCodec, DynamicClaimCheckCodec ccCodec) =>
+                {
+                    // Hot-swap: flip flags on the live singleton codec instances.
+                    // No restart required — new workflows immediately use the new settings.
+                    encCodec.SetEnabled(update.EnableEncryption);
+                    ccCodec.SetEnabled(update.EnableClaimCheck);
+                    return Results.Ok(new { saved = true, restartRequired = false });
+                });
 
             app.MapGet("/api/config", async (IPrescriptionRepository repo) =>
             {
@@ -464,10 +488,11 @@ namespace PBMAdjudicationService
                 var input = new PrescriptionInput
                 {
                     PrescriptionId = prescriptionId,
-                    PatientName = prescription.PatientName,
-                    Medication = prescription.Medication,
-                    EligibleDate = prescription.EligibleDate,
+                    PatientName    = prescription.PatientName,
+                    Medication     = prescription.Medication,
+                    EligibleDate   = prescription.EligibleDate,
                     RefillsRemaining = prescription.RefillsRemaining
+                    // ImageData is set via the separate /api/workflow/start-with-image endpoint
                 };
 
                 var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
@@ -475,6 +500,59 @@ namespace PBMAdjudicationService
                 {
                     await client.StartWorkflowAsync(
                         (PrescriptionWorkflow wf) => wf.RunAsync(input),
+                        new WorkflowOptions
+                        {
+                            Id = workflowId,
+                            TaskQueue = "prescription-task-queue"
+                        });
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"🚀 [temporal] Started workflow for {prescription.PatientName}");
+                }
+                catch (Temporalio.Exceptions.WorkflowAlreadyStartedException)
+                {
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"⚡ [temporal] Workflow already running for {prescription.PatientName} — attaching");
+                }
+
+                return Results.Ok(new { workflowId });
+            });
+
+            // Start Temporal workflow with an attached image (claim check demo path)
+            app.MapPost("/api/workflow/start-with-image/{prescriptionId}", async (
+                string prescriptionId,
+                WorkflowStartWithImageRequest request,
+                IPrescriptionRepository repo,
+                [FromServices] ITemporalClient client,
+                DynamicClaimCheckCodec ccCodec,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                var input = new PrescriptionInput
+                {
+                    PrescriptionId   = prescriptionId,
+                    PatientName      = prescription.PatientName,
+                    Medication       = prescription.Medication,
+                    EligibleDate     = prescription.EligibleDate,
+                    RefillsRemaining = prescription.RefillsRemaining
+                    // ImageData intentionally omitted — passed as a separate workflow
+                    // argument so the ClaimCheckCodec only offloads the image payload,
+                    // leaving the Rx fields visible in Temporal history.
+                };
+
+                var sizeKb = (request.ImageData?.Length ?? 0) * 3 / 4 / 1024; // rough base64 → bytes
+                var claimCheckNote = ccCodec.IsEnabled
+                    ? $"🗄️ [claim-check] Image (~{sizeKb} KB) will be offloaded to external storage"
+                    : $"⚠️ [claim-check] Claim Check DISABLED — {sizeKb} KB image will be sent raw to Temporal";
+
+                await hubContext.Clients.All.SendAsync("ReceiveLog", claimCheckNote);
+
+                var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
+                try
+                {
+                    await client.StartWorkflowAsync(
+                        (PrescriptionWorkflow wf) => wf.RunAsync(input, request.ImageData),
                         new WorkflowOptions
                         {
                             Id = workflowId,
@@ -556,4 +634,5 @@ namespace PBMAdjudicationService
     }
 }
 
-public record FeatureFlagsUpdate(bool EnableEncryption);
+public record FeatureFlagsUpdate(bool EnableEncryption, bool EnableClaimCheck);
+public record WorkflowStartWithImageRequest(string? ImageData);

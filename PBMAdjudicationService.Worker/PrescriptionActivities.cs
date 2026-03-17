@@ -16,8 +16,20 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<ValidationResult> ValidateEligibilityAsync(string prescriptionId)
+        public async Task<ValidationResult> ValidateEligibilityAsync(string prescriptionId, string? imageData = null)
         {
+            // If an image was attached, log its presence. In a real PBM system this would
+            // be the insurance card or Rx scan used to verify eligibility. The Claim Check
+            // codec has already replaced large payloads with a storage token before this
+            // activity input was written to Temporal history — so what arrived here is
+            // either the raw base64 string (small image, under threshold) or the original
+            // bytes fetched back from the store (large image, token resolved by codec).
+            if (imageData != null)
+            {
+                var sizeKb = (imageData.Length * 3 / 4) / 1024;
+                Console.WriteLine($"[validate] Insurance card / Rx image attached (~{sizeKb} KB) — using for eligibility verification");
+            }
+
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/validate/{prescriptionId}", null);
 

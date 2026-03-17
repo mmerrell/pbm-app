@@ -7,6 +7,8 @@ namespace PBMAdjudication.Core
         public string Medication { get; set; } = "";
         public DateTime EligibleDate { get; set; }
         public int RefillsRemaining { get; set; }
+
+
     }
 
     public class ValidationResult

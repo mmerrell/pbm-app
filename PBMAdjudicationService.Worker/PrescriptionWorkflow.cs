@@ -35,16 +35,18 @@ namespace PBMAdjudication.Worker
         };
 
         [WorkflowRun]
-        public async Task<WorkflowResult> RunAsync(PrescriptionInput input)
+        public async Task<WorkflowResult> RunAsync(PrescriptionInput input, string? imageData = null)
         {
             var result = new WorkflowResult { Success = false, Status = "Pending" };
 
-
             // Step 0: Validate Eligibility
+            // imageData is passed as a separate workflow argument so the ClaimCheckCodec
+            // can offload it independently — the Rx fields in `input` remain visible
+            // in Temporal history while only the image payload is claim-checked.
             try
             {
                 var validated = await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.ValidateEligibilityAsync(input.PrescriptionId),
+                    (PrescriptionActivities a) => a.ValidateEligibilityAsync(input.PrescriptionId, imageData),
                     DefaultActivityOptions);
 
                 if (!validated.Eligible && validated.EligibleDate.HasValue)
@@ -55,7 +57,7 @@ namespace PBMAdjudication.Worker
                     {
                         await Workflow.DelayAsync(waitTime);
                     }
-                    // After waiting, validate again
+                    // After waiting, validate again (no image needed for retry)
                     validated = await Workflow.ExecuteActivityAsync(
                         (PrescriptionActivities a) => a.ValidateEligibilityAsync(input.PrescriptionId),
                         DefaultActivityOptions);
@@ -213,21 +215,18 @@ namespace PBMAdjudication.Worker
             return result;
         }
 
-        // Signal handler for doctor approval
         [WorkflowSignal]
         public async Task ApproveAsync()
         {
             approvalReceived = true;
         }
 
-        // Signal handler for doctor denial
         [WorkflowSignal]
         public async Task DenyAsync()
         {
             approvalDenied = true;
         }
 
-        // Query handler to check current status
         [WorkflowQuery]
         public string GetStatus()
         {
