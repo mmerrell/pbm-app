@@ -14,14 +14,30 @@ builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddHttpClient();
 
 // ── Codec / DataConverter setup ──────────────────────────────────────────────
-var enableEncryption = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
-var keyBase64 = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
-var dynamicCodec = new DynamicEncryptionCodec(keyBase64, enableEncryption);
-var dataConverter = DataConverter.Default with { PayloadCodec = dynamicCodec };
+// Must exactly mirror the Api's codec pipeline so the Worker can read history
+// written by the Api and vice versa.
+//
+// Encode order:  ClaimCheck → Encryption
+// Decode order:  Encryption → ClaimCheck  (CompositePayloadCodec reverses automatically)
+
+var enableEncryption  = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
+var enableClaimCheck  = builder.Configuration.GetValue<bool>("Temporal:EnableClaimCheck");
+var keyBase64         = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
+var claimCheckStorePath = builder.Configuration["Temporal:ClaimCheckStorePath"] ?? "/tmp/claim-check";
+
+var dynamicEncryptionCodec = new DynamicEncryptionCodec(keyBase64, enableEncryption);
+var dynamicClaimCheckCodec = new DynamicClaimCheckCodec(
+    new FileSystemClaimCheckStore(claimCheckStorePath), enableClaimCheck);
+
+var compositeCodec = new CompositePayloadCodec(dynamicClaimCheckCodec, dynamicEncryptionCodec);
+var dataConverter  = DataConverter.Default with { PayloadCodec = compositeCodec };
 
 Console.WriteLine(enableEncryption
-    ? "[Codec] Payload encryption ENABLED — PII will be opaque in Temporal UI"
-    : "[Codec] Payload encryption DISABLED — data visible in Temporal UI");
+    ? "[Codec] Payload encryption ENABLED"
+    : "[Codec] Payload encryption DISABLED");
+Console.WriteLine(enableClaimCheck
+    ? $"[Codec] Claim Check ENABLED — threshold {dynamicClaimCheckCodec.ThresholdBytes / 1024} KB, store: {claimCheckStorePath}"
+    : "[Codec] Claim Check DISABLED — large payloads will hit Temporal size limits");
 // ─────────────────────────────────────────────────────────────────────────────
 
 var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";

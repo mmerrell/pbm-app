@@ -62,8 +62,12 @@ services:
       - ConnectionStrings__Postgres=Host=postgres;Port=5432;Database=pbm_adjudication;Username=postgres;Password=postgres
       - Temporal__Host=temporal:7233
       - Temporal__EnableEncryption=false
+      - Temporal__EnableClaimCheck=false
+      - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://localhost:5002
+    volumes:
+      - claim-check-data:/tmp/claim-check
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,8 +84,12 @@ services:
     environment:
       - Temporal__Host=temporal:7233
       - Temporal__EnableEncryption=false
+      - Temporal__EnableClaimCheck=false
+      - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://api:5002
+    volumes:
+      - claim-check-data:/tmp/claim-check
     depends_on:
       postgres:
         condition: service_healthy
@@ -96,3 +104,4 @@ networks:
 
 volumes:
   postgres-data:
+  claim-check-data:   # shared between Api and Worker — both must resolve the same tokens

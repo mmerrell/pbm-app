@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -488,6 +488,66 @@
 
         .form-group select option { background: var(--space-3); }
 
+        /* ─── File Upload ────────────────────────────────────────── */
+        .file-upload-area {
+            border: 1px dashed var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--space-3);
+            padding: 12px;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+            position: relative;
+        }
+
+        .file-upload-area:hover,
+        .file-upload-area.has-file {
+            border-color: var(--uv);
+            background: var(--uv-subtle);
+        }
+
+        .file-upload-area input[type="file"] {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            cursor: pointer;
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            border: none;
+            background: transparent;
+        }
+
+        .file-upload-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: var(--muted);
+            font-family: var(--font-mono);
+            pointer-events: none;
+        }
+
+        .file-upload-label .file-icon {
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        .file-upload-label.file-selected {
+            color: var(--uv);
+        }
+
+        .file-size-warning {
+            margin-top: 6px;
+            font-size: 10px;
+            font-family: var(--font-mono);
+            display: none;
+        }
+
+        .file-size-warning.show { display: block; }
+        .file-size-warning.over-threshold { color: var(--amber); }
+        .file-size-warning.under-threshold { color: var(--muted); }
+
+        /* ─── Modal Buttons ──────────────────────────────────────── */
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
 
         .btn-submit {
@@ -925,7 +985,6 @@
             font-family: var(--font-mono);
         }
 
-
         /* ─── Version Badge ──────────────────────────────────────── */
         .version-badge {
             position: fixed;
@@ -1029,6 +1088,18 @@
                 <label for="refills">Refills Remaining</label>
                 <input type="number" id="refills" min="0" max="12" value="3">
             </div>
+            <!-- Claim Check demo: attach an image to trigger large-payload path -->
+            <div class="form-group">
+                <label>Attach Image <span style="color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0">(insurance card / Rx scan — triggers Claim Check)</span></label>
+                <div class="file-upload-area" id="fileUploadArea">
+                    <input type="file" id="imageAttachment" accept="image/*" onchange="handleImageSelect(this)">
+                    <div class="file-upload-label" id="fileUploadLabel">
+                        <span class="file-icon">📎</span>
+                        <span id="fileUploadText">Click to attach image (optional)</span>
+                    </div>
+                </div>
+                <div class="file-size-warning" id="fileSizeWarning"></div>
+            </div>
             <div class="modal-buttons">
                 <button class="btn btn-submit" onclick="submitNewRequest()">Submit & Process</button>
                 <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
@@ -1052,7 +1123,6 @@
         <div class="panel">
             <div class="panel-header">
                 <span class="header-icon">
-                    <!-- person icon -->
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
                     Patient Portal
                 </span>
@@ -1067,7 +1137,6 @@
         <div class="panel">
             <div class="panel-header">
                 <span class="header-icon">
-                    <!-- stethoscope-ish icon -->
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
                     Doctor Portal
                 </span>
@@ -1081,7 +1150,6 @@
         <div class="panel">
             <div class="panel-header">
                 <span class="header-icon">
-                    <!-- settings icon -->
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
                     Control Panel
                 </span>
@@ -1099,6 +1167,7 @@
                 <!-- Feature Flags -->
                 <div class="feature-flags-section">
                     <div class="feature-flags-title">Feature Flags</div>
+
                     <div class="feature-flag-row">
                         <div class="feature-flag-info">
                             <span class="feature-flag-name">Payload Encryption</span>
@@ -1110,6 +1179,16 @@
                         </label>
                     </div>
 
+                    <div class="feature-flag-row">
+                        <div class="feature-flag-info">
+                            <span class="feature-flag-name">Claim Check</span>
+                            <span class="feature-flag-desc" id="claimCheckDesc">Loading...</span>
+                        </div>
+                        <label class="toggle-switch feature-flag-toggle">
+                            <input type="checkbox" id="claimCheckToggle" onchange="toggleClaimCheck(this.checked)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
                 </div>
 
                 <!-- Endpoint Configurations -->
@@ -1133,13 +1212,11 @@
     </div>
 
     <script>
-        // SignalR connection
         const connection = new signalR.HubConnectionBuilder()
             .withUrl("/notificationHub")
             .withAutomaticReconnect()
             .build();
 
-        // State
         let prescriptions = {};
         let approvals = {};
         let endpointConfigs = {};
@@ -1148,21 +1225,16 @@
         let isConnecting = false;
         let workflowRetrying = {};
 
-        // Start connection
+        let pendingImageBase64 = null;
+        const CLAIM_CHECK_THRESHOLD_KB = 128;
+
         async function startConnection() {
-            if (isConnecting) {
-                console.log('Connection attempt already in progress');
-                return;
-            }
-    
+            if (isConnecting) return;
             isConnecting = true;
-    
             try {
                 await connection.start();
                 console.log("SignalR Connected");
                 updateConnectionStatus();
-        
-                // Load initial data
                 await loadPrescriptions();
                 await loadApprovals();
                 await loadConfigs();
@@ -1191,14 +1263,9 @@
         async function toggleAutoProcess() {
             autoProcessMode = !autoProcessMode;
             updateConnectionStatus();
-
             if (autoProcessMode) {
-                const toProcess = Object.values(prescriptions).filter(p => 
-                    p.status === 'Pending'
-                );
-                for (const p of toProcess) {
-                    await processWorkflow(p.id);
-                }
+                const toProcess = Object.values(prescriptions).filter(p => p.status === 'Pending');
+                for (const p of toProcess) await processWorkflow(p.id);
             }
         }
 
@@ -1206,14 +1273,12 @@
             const tooltip = document.getElementById('statusTooltip');
             const mode = autoProcessMode ? 'Auto-Process' : 'Manual';
             const workflowText = activeWorkflows > 0 ? `${activeWorkflows} active workflow(s)` : 'No active workflows';
-            
             tooltip.innerHTML = `
                 <strong>Mode:</strong> ${mode}<br>
                 <strong>Status:</strong> Connected<br>
                 <strong>Workflows:</strong> ${workflowText}<br>
                 <em style="color: var(--muted)">Click to toggle mode</em>
             `;
-            
             tooltip.style.top = (event.clientY + 10) + 'px';
             tooltip.style.left = (event.clientX - 100) + 'px';
             tooltip.classList.add('show');
@@ -1223,13 +1288,11 @@
             document.getElementById('statusTooltip').classList.remove('show');
         }
 
-        // SignalR event handlers
         connection.on("ReceiveLog", (message) => {
             const logsContainer = document.getElementById('logsContainer');
             const logEntry = document.createElement('div');
             logEntry.className = 'log-entry';
-            const timestamp = new Date().toLocaleTimeString();
-            logEntry.textContent = `[${timestamp}] ${message}`;
+            logEntry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
             logsContainer.appendChild(logEntry);
             logsContainer.scrollTop = logsContainer.scrollHeight;
         });
@@ -1244,35 +1307,92 @@
             renderApprovals();
         });
 
-        // Feature flags
+        // ── Feature flags ──────────────────────────────────────────────────────
+
         async function loadFeatureFlags() {
             const response = await fetch('/api/config/features');
             const data = await response.json();
-            const toggle = document.getElementById('encryptionToggle');
-            const desc = document.getElementById('encryptionDesc');
-            toggle.checked = data.enableEncryption;
-            desc.textContent = data.enableEncryption
+
+            const encToggle = document.getElementById('encryptionToggle');
+            const encDesc   = document.getElementById('encryptionDesc');
+            encToggle.checked = data.enableEncryption;
+            encDesc.textContent = data.enableEncryption
                 ? 'ON — PII encrypted in Temporal history'
                 : 'OFF — PII visible in Temporal history';
-            desc.style.color = data.enableEncryption ? 'var(--green)' : 'var(--muted)';
+            encDesc.style.color = data.enableEncryption ? 'var(--green)' : 'var(--muted)';
+
+            document.getElementById('claimCheckToggle').checked = data.enableClaimCheck;
+            updateClaimCheckDesc(data.enableClaimCheck);
         }
 
         async function toggleEncryption(enabled) {
-            const desc = document.getElementById('encryptionDesc');
-
+            const current = await (await fetch('/api/config/features')).json();
             await fetch('/api/config/features', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enableEncryption: enabled })
+                body: JSON.stringify({ enableEncryption: enabled, enableClaimCheck: current.enableClaimCheck })
             });
-
-            desc.textContent = enabled
-                ? 'ON — PII encrypted in Temporal history'
-                : 'OFF — PII visible in Temporal history';
+            const desc = document.getElementById('encryptionDesc');
+            desc.textContent = enabled ? 'ON — PII encrypted in Temporal history' : 'OFF — PII visible in Temporal history';
             desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
         }
 
-        // Load data from API
+        async function toggleClaimCheck(enabled) {
+            const current = await (await fetch('/api/config/features')).json();
+            await fetch('/api/config/features', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enableEncryption: current.enableEncryption, enableClaimCheck: enabled })
+            });
+            updateClaimCheckDesc(enabled);
+        }
+
+        function updateClaimCheckDesc(enabled) {
+            const desc = document.getElementById('claimCheckDesc');
+            desc.textContent = enabled
+                ? `ON — images >${CLAIM_CHECK_THRESHOLD_KB} KB offloaded to storage`
+                : 'OFF — large payloads sent raw to Temporal';
+            desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
+        }
+
+        // ── Image attachment ───────────────────────────────────────────────────
+
+        function handleImageSelect(input) {
+            const file = input.files[0];
+            const label      = document.getElementById('fileUploadLabel');
+            const labelText  = document.getElementById('fileUploadText');
+            const uploadArea = document.getElementById('fileUploadArea');
+            const warning    = document.getElementById('fileSizeWarning');
+
+            if (!file) {
+                pendingImageBase64 = null;
+                label.classList.remove('file-selected');
+                uploadArea.classList.remove('has-file');
+                labelText.textContent = 'Click to attach image (optional)';
+                warning.classList.remove('show');
+                return;
+            }
+
+            const sizeKb = Math.round(file.size / 1024);
+            labelText.textContent = `${file.name} (${sizeKb} KB)`;
+            label.classList.add('file-selected');
+            uploadArea.classList.add('has-file');
+
+            if (sizeKb > CLAIM_CHECK_THRESHOLD_KB) {
+                warning.textContent = `⚠ ${sizeKb} KB exceeds ${CLAIM_CHECK_THRESHOLD_KB} KB threshold — Claim Check will offload this if enabled`;
+                warning.className = 'file-size-warning show over-threshold';
+            } else {
+                warning.textContent = `${sizeKb} KB — under ${CLAIM_CHECK_THRESHOLD_KB} KB threshold, will pass through inline`;
+                warning.className = 'file-size-warning show under-threshold';
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => { pendingImageBase64 = e.target.result.split(',')[1]; };
+            reader.readAsDataURL(file);
+        }
+
+        // ── Load data ──────────────────────────────────────────────────────────
+
         async function loadPrescriptions() {
             const response = await fetch('/api/prescriptions');
             const data = await response.json();
@@ -1295,11 +1415,11 @@
             renderConfigs();
         }
 
-        // Render prescriptions
+        // ── Render prescriptions ───────────────────────────────────────────────
+
         function renderPrescriptions() {
-            console.log('Prescription statuses:', Object.values(prescriptions).map(p => `${p.patientName}: ${p.status}`));
             const container = document.getElementById('patientPortal');
-            const prescriptionList = Object.values(prescriptions).sort((a, b) => 
+            const prescriptionList = Object.values(prescriptions).sort((a, b) =>
                 new Date(b.requestedDate) - new Date(a.requestedDate)
             );
 
@@ -1310,136 +1430,87 @@
 
             function generateTimeline(p) {
                 const steps = [
-                    { key: 'validate', name: 'Validate', statuses: ['Validating', 'Validated'] },
-                    { key: 'authorize', name: 'Authorize', statuses: ['Authorizing', 'Authorized'] },
-                    { key: 'adjudicate', name: 'Adjudicate', statuses: ['Adjudicating', 'Adjudicated'] },
-                    { key: 'approval', name: 'Approval', statuses: ['ApprovalNeeded', 'Approved', 'Denied'] },
-                    { key: 'submit', name: 'Submit', statuses: ['Submitting', 'Completed'] }
+                    { key: 'validate',   name: 'Validate' },
+                    { key: 'authorize',  name: 'Authorize' },
+                    { key: 'adjudicate', name: 'Adjudicate' },
+                    { key: 'approval',   name: 'Approval' },
+                    { key: 'submit',     name: 'Submit' }
                 ];
 
-                let currentStepIndex = -1;
-                let failedStep = -1;
-                let isWaiting = p.status === 'Waiting';
-                let approvalSkipped = false;
-    
-                if (p.status === 'Pending') {
-                    currentStepIndex = -1;
-                } else if (p.status === 'Waiting') {
-                    currentStepIndex = 0;
-                } else if (p.status === 'Validating' || p.status === 'Validated') {
-                    currentStepIndex = 0;
-                } else if (p.status === 'Authorizing' || p.status === 'Authorized') {
-                    currentStepIndex = 1;
-                } else if (p.status === 'Adjudicating' || p.status === 'Adjudicated') {
-                    currentStepIndex = 2;
-                } else if (p.status === 'ApprovalNeeded' || p.status === 'Approved' || p.status === 'Denied' || p.status === 'ApprovalTimeout') {
+                let currentStepIndex = -1, failedStep = -1;
+                let isWaiting = p.status === 'Waiting', approvalSkipped = false;
+
+                if      (p.status === 'Pending')                                     { currentStepIndex = -1; }
+                else if (p.status === 'Waiting')                                     { currentStepIndex = 0; }
+                else if (p.status === 'Validating'   || p.status === 'Validated')   { currentStepIndex = 0; }
+                else if (p.status === 'Authorizing'  || p.status === 'Authorized')  { currentStepIndex = 1; }
+                else if (p.status === 'Adjudicating' || p.status === 'Adjudicated') { currentStepIndex = 2; }
+                else if (p.status === 'ApprovalNeeded' || p.status === 'Approved' ||
+                         p.status === 'Denied' || p.status === 'ApprovalTimeout')   {
                     currentStepIndex = 3;
-                    if (p.status === 'Denied' || p.status === 'ApprovalTimeout') {
-                        failedStep = 3;
-                    }
-                } else if (p.status === 'Submitting' || p.status === 'Completed') {
+                    if (p.status === 'Denied' || p.status === 'ApprovalTimeout') failedStep = 3;
+                }
+                else if (p.status === 'Submitting' || p.status === 'Completed') {
                     currentStepIndex = 4;
-                    if (!p.approvalNeededReason) {
-                        approvalSkipped = true;
-                    }
-                } else if (p.status === 'OnHold') {
+                    if (!p.approvalNeededReason) approvalSkipped = true;
+                }
+                else if (p.status === 'OnHold') {
                     currentStepIndex = p.failedStep ?? -1;
-                    failedStep = p.failedStep ?? -1; 
+                    failedStep       = p.failedStep ?? -1;
                 }
 
-                let timelineHTML = '<div class="timeline">';
-                timelineHTML += '<div class="timeline-line"></div>';
-                timelineHTML += '<div class="timeline-steps">';
+                let html = '<div class="timeline"><div class="timeline-line"></div><div class="timeline-steps">';
 
                 steps.forEach((step, index) => {
-                    let pipClass = 'timeline-pip';
-                    let icon = '';
-                    let label = '';
-                    let tooltip = step.name;
+                    let pipClass = 'timeline-pip', icon = '', label = '', tooltip = step.name;
 
                     if (index === failedStep) {
-                        pipClass += ' failed';
-                        icon = '✗';
-                        if (p.status === 'ApprovalTimeout') {
-                            label = `<div class="timeline-label">Timeout</div>`;
-                            tooltip = `${step.name} - Approval timeout`;
-                        } else {
-                            label = `<div class="timeline-label">Denied</div>`;
-                            tooltip = `${step.name} - Denied by doctor`;
-                        }
+                        pipClass += ' failed'; icon = '✗';
+                        if (p.status === 'ApprovalTimeout') { label = `<div class="timeline-label">Timeout</div>`; tooltip = `${step.name} - Approval timeout`; }
+                        else                                { label = `<div class="timeline-label">Denied</div>`;  tooltip = `${step.name} - Denied by doctor`; }
                     } else if (approvalSkipped && index === 3) {
-                        pipClass += ' skipped';
-                        icon = '⊘';
-                        tooltip = `${step.name} - Not required`;
-                    } else if (index < currentStepIndex || (index === currentStepIndex && !(approvalSkipped && index === 3) && p.status.endsWith('ed') && p.status !== 'ApprovalNeeded' && failedStep !== index)) {
-                        pipClass += ' completed';
-                        icon = '✓';
-                        tooltip = `${step.name} - Completed`;
+                        pipClass += ' skipped'; icon = '⊘'; tooltip = `${step.name} - Not required`;
+                    } else if (index < currentStepIndex ||
+                               (index === currentStepIndex && !(approvalSkipped && index === 3) &&
+                                p.status.endsWith('ed') && p.status !== 'ApprovalNeeded' && failedStep !== index)) {
+                        pipClass += ' completed'; icon = '✓'; tooltip = `${step.name} - Completed`;
                     } else if (index === currentStepIndex) {
                         if (isWaiting && index === 0) {
-                            pipClass += ' waiting';
-                            icon = '⏰';
+                            pipClass += ' waiting'; icon = '⏰';
                             label = `<div class="timeline-label">Not Eligible Yet</div>`;
-                            const eligibleDate = new Date(p.eligibleDate);
-                            const waitMinutes = Math.round((eligibleDate - new Date()) / 60000);
-                            tooltip = `${step.name} - Waiting ${waitMinutes} min`;
+                            tooltip = `${step.name} - Waiting ${Math.round((new Date(p.eligibleDate) - new Date()) / 60000)} min`;
                         } else if (p.status === 'ApprovalNeeded' && index === 3) {
-                            pipClass += ' waiting';
-                            icon = '⏰';
+                            pipClass += ' waiting'; icon = '⏰';
                             label = `<div class="timeline-label">Awaiting Doctor</div>`;
                             tooltip = `${step.name} - Pending approval`;
                         } else if (failedStep === index) {
-                            pipClass += ' failed';
-                            icon = '✗';
-                            label = `<div class="timeline-label">Denied</div>`;
-                            tooltip = `${step.name} - Denied`;
+                            pipClass += ' failed'; icon = '✗';
+                            label = `<div class="timeline-label">Denied</div>`; tooltip = `${step.name} - Denied`;
                         } else {
                             pipClass += ' current';
-                            icon = '';
-                            label = `<div class="timeline-label">${p.status}</div>`;
-                            tooltip = `${step.name} - In Progress`;
+                            label = `<div class="timeline-label">${p.status}</div>`; tooltip = `${step.name} - In Progress`;
                         }
-                    } else {
-                        icon = '';
-                        tooltip = step.name;
                     }
 
-                    timelineHTML += `
-                        <div class="timeline-step">
-                            ${label}
-                            <div class="${pipClass}">${icon}</div>
-                            <div class="timeline-tooltip">${tooltip}</div>
-                        </div>
-                    `;
+                    html += `<div class="timeline-step">${label}<div class="${pipClass}">${icon}</div><div class="timeline-tooltip">${tooltip}</div></div>`;
                 });
 
-                timelineHTML += '</div></div>';
-                return timelineHTML;
+                return html + '</div></div>';
             }
 
             container.innerHTML = prescriptionList.map(p => {
                 const eligibleDate = new Date(p.eligibleDate);
-                const now = new Date();
-                const isEligible = now >= eligibleDate;
-                const eligibleText = isEligible 
-                    ? `<span style="color: var(--green);">✓ Eligible</span>` 
+                const eligibleText = new Date() >= eligibleDate
+                    ? `<span style="color: var(--green);">✓ Eligible</span>`
                     : `<span style="color: var(--amber);">⏰ ${eligibleDate.toLocaleDateString()} ${eligibleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
-    
+
                 let notifBadge = '';
-                if (p.notificationStatus === 'Retrying') {
-                    notifBadge = `<div class="notif-badge retrying">⚠ Notification retrying...</div>`;
-                } else if (p.notificationStatus === 'Failed') {
-                    notifBadge = `<div class="notif-badge failed">✗ Notification failed permanently</div>`;
-                } else if (p.notificationStatus === 'Sent') {
-                    notifBadge = `<div class="notif-badge sent">✓ Patient notified</div>`;
-                }
+                if      (p.notificationStatus === 'Retrying') notifBadge = `<div class="notif-badge retrying">⚠ Notification retrying...</div>`;
+                else if (p.notificationStatus === 'Failed')   notifBadge = `<div class="notif-badge failed">✗ Notification failed permanently</div>`;
+                else if (p.notificationStatus === 'Sent')     notifBadge = `<div class="notif-badge sent">✓ Patient notified</div>`;
 
                 return `
-                    <div class="prescription-card ${
-                        p.status === 'Completed' ? 'status-completed' :
-                        p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'status-denied' :
-                        p.status === 'OnHold' ? 'status-failed' : ''
-                    }">
+                    <div class="prescription-card ${p.status === 'Completed' ? 'status-completed' : p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'status-denied' : p.status === 'OnHold' ? 'status-failed' : ''}">
                         ${p.copay ? `<div class="copay-badge">$${p.copay.toFixed(2)}</div>` : ''}
                         <h3>${p.patientName}</h3>
                         <div class="medication">${p.medication}</div>
@@ -1454,12 +1525,12 @@
                         ${generateTimeline(p)}
                         ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button>` : ''}
                         ${notifBadge}
-                    </div>
-                `;
+                    </div>`;
             }).join('');
         }
 
-        // Render approvals
+        // ── Render approvals ───────────────────────────────────────────────────
+
         function renderApprovals() {
             const container = document.getElementById('doctorPortal');
             const approvalList = Object.values(approvals)
@@ -1481,19 +1552,19 @@
                         <button class="btn btn-approve" onclick="handleApproval('${a.id}', true)">✓ Approve</button>
                         <button class="btn btn-deny" onclick="handleApproval('${a.id}', false)">✗ Deny</button>
                     </div>
-                </div>
-            `).join('');
+                </div>`).join('');
         }
 
-        // Render endpoint configs
+        // ── Render endpoint configs ────────────────────────────────────────────
+
         function renderConfigs() {
             const container = document.getElementById('endpointConfigs');
             const endpoints = [
-                { key: 'validate', name: 'Validate Eligibility' },
-                { key: 'authorize', name: 'Prior Authorization' },
+                { key: 'validate',   name: 'Validate Eligibility' },
+                { key: 'authorize',  name: 'Prior Authorization' },
                 { key: 'adjudicate', name: 'Adjudicate Claim' },
-                { key: 'notify', name: 'Notifications' },
-                { key: 'submit', name: 'Submit to Pharmacy' }
+                { key: 'notify',     name: 'Notifications' },
+                { key: 'submit',     name: 'Submit to Pharmacy' }
             ];
 
             container.innerHTML = endpoints.map(ep => {
@@ -1511,7 +1582,7 @@
                         <div class="control-group">
                             <label class="control-label">Failure Rate</label>
                             <div class="slider-container">
-                                <input type="range" min="0" max="100" value="${config.failureRatePercent}" 
+                                <input type="range" min="0" max="100" value="${config.failureRatePercent}"
                                     oninput="updateConfig('${ep.key}', 'failureRatePercent', this.value)">
                                 <span class="slider-value" id="${ep.key}-failure">${config.failureRatePercent}%</span>
                             </div>
@@ -1519,28 +1590,21 @@
                         <div class="control-group">
                             <label class="control-label">Latency (ms)</label>
                             <div class="slider-container">
-                                <input type="range" min="0" max="5000" step="100" value="${config.latencyMs}" 
+                                <input type="range" min="0" max="5000" step="100" value="${config.latencyMs}"
                                     oninput="updateConfig('${ep.key}', 'latencyMs', this.value)">
                                 <span class="slider-value" id="${ep.key}-latency">${config.latencyMs}ms</span>
                             </div>
                         </div>
-                    </div>
-                `;
+                    </div>`;
             }).join('');
         }
 
         async function updateConfig(endpoint, property, value) {
             const config = endpointConfigs[endpoint];
-            if (property === 'completeOutage') {
-                config[property] = value;
-            } else {
-                config[property] = parseInt(value);
-            }
-            if (property === 'failureRatePercent') {
-                document.getElementById(`${endpoint}-failure`).textContent = `${value}%`;
-            } else if (property === 'latencyMs') {
-                document.getElementById(`${endpoint}-latency`).textContent = `${value}ms`;
-            }
+            if (property === 'completeOutage') config[property] = value;
+            else config[property] = parseInt(value);
+            if (property === 'failureRatePercent') document.getElementById(`${endpoint}-failure`).textContent = `${value}%`;
+            else if (property === 'latencyMs')     document.getElementById(`${endpoint}-latency`).textContent = `${value}ms`;
             await fetch(`/api/config/${endpoint}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1552,16 +1616,14 @@
             await fetch(`/api/approve/${approvalId}?approved=${approved}`, { method: 'POST' });
         }
 
-        function clearLogs() {
-            document.getElementById('logsContainer').innerHTML = '';
-        }
+        function clearLogs() { document.getElementById('logsContainer').innerHTML = ''; }
 
         async function generateLoad() {
             await fetch('/api/admin/generate-load', { method: 'POST' });
             if (autoProcessMode) {
                 setTimeout(async () => {
-                    const pendingPrescriptions = Object.values(prescriptions).filter(p => p.status === 'Pending');
-                    for (const p of pendingPrescriptions) {
+                    const pending = Object.values(prescriptions).filter(p => p.status === 'Pending');
+                    for (const p of pending) {
                         await processWorkflow(p.id);
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
@@ -1571,16 +1633,11 @@
 
         function showConfirm(message, onConfirm) {
             document.getElementById('confirmMessage').textContent = message;
-            document.getElementById('confirmYes').onclick = () => {
-                closeConfirmModal();
-                onConfirm();
-            };
+            document.getElementById('confirmYes').onclick = () => { closeConfirmModal(); onConfirm(); };
             document.getElementById('confirmModal').classList.add('show');
         }
 
-        function closeConfirmModal() {
-            document.getElementById('confirmModal').classList.remove('show');
-        }
+        function closeConfirmModal() { document.getElementById('confirmModal').classList.remove('show'); }
 
         async function resetEverything() {
             showConfirm('This will reset all data and configurations. Continue?', async () => {
@@ -1607,43 +1664,50 @@
         }
 
         function openNewRequestModal() {
-            const firstNames = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara", 
+            const firstNames = ["James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara",
                                 "David", "Elizabeth", "Richard", "Susan", "Joseph", "Jessica", "Thomas", "Sarah", "Charles", "Karen"];
-            const lastNames = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
-                               "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"];
-            
-            const randomName = `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
-            document.getElementById('patientName').value = randomName;
-            const medications = document.getElementById('medication').options;
-            document.getElementById('medication').selectedIndex = Math.floor(Math.random() * medications.length);
+            const lastNames  = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez",
+                                "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson", "Thomas", "Taylor", "Moore", "Jackson", "Martin"];
+
+            document.getElementById('patientName').value =
+                `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+            document.getElementById('medication').selectedIndex =
+                Math.floor(Math.random() * document.getElementById('medication').options.length);
             document.getElementById('refills').value = Math.floor(Math.random() * 13);
+
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             document.getElementById('eligibleDate').value = now.toISOString().slice(0, 16);
+
+            pendingImageBase64 = null;
+            document.getElementById('imageAttachment').value = '';
+            document.getElementById('fileUploadLabel').classList.remove('file-selected');
+            document.getElementById('fileUploadArea').classList.remove('has-file');
+            document.getElementById('fileUploadText').textContent = 'Click to attach image (optional)';
+            document.getElementById('fileSizeWarning').classList.remove('show');
+
             document.getElementById('newRequestModal').classList.add('show');
         }
 
-        function closeModal() {
-            document.getElementById('newRequestModal').classList.remove('show');
-        }
+        function closeModal() { document.getElementById('newRequestModal').classList.remove('show'); }
 
         async function submitNewRequest() {
-            const patientName = document.getElementById('patientName').value;
-            const medication = document.getElementById('medication').value;
+            const patientName  = document.getElementById('patientName').value;
+            const medication   = document.getElementById('medication').value;
             const eligibleDate = document.getElementById('eligibleDate').value;
-            const refills = parseInt(document.getElementById('refills').value);
+            const refills      = parseInt(document.getElementById('refills').value);
 
             if (!patientName) { alert('Please enter a patient name'); return; }
 
             const prescription = {
-                id: 'P' + Date.now(),
-                patientId: 'PAT' + Math.random().toString(36).substr(2, 9),
+                id:               'P' + Date.now(),
+                patientId:        'PAT' + Math.random().toString(36).substr(2, 9),
                 patientName,
                 medication,
-                eligibleDate: new Date(eligibleDate).toISOString(),
+                eligibleDate:     new Date(eligibleDate).toISOString(),
                 refillsRemaining: refills,
-                status: 'Pending',
-                requestedDate: new Date().toISOString()
+                status:           'Pending',
+                requestedDate:    new Date().toISOString()
             };
 
             await fetch('/api/prescriptions', {
@@ -1655,7 +1719,14 @@
             prescriptions[prescription.id] = prescription;
             renderPrescriptions();
             closeModal();
-            if (autoProcessMode) await processWorkflow(prescription.id);
+
+            // Always start the workflow on submit — image path if attached, standard path otherwise
+            if (pendingImageBase64) {
+                await processWorkflowWithImage(prescription.id, pendingImageBase64);
+                pendingImageBase64 = null;
+            } else {
+                await processWorkflow(prescription.id);
+            }
         }
 
         async function processWorkflow(prescriptionId) {
@@ -1668,6 +1739,27 @@
                 console.log('Temporal workflow started:', result.workflowId);
             } catch (error) {
                 console.error('Failed to start workflow:', error);
+                renderPrescriptions();
+            } finally {
+                activeWorkflows--;
+                updateConnectionStatus();
+            }
+        }
+
+        async function processWorkflowWithImage(prescriptionId, imageBase64) {
+            activeWorkflows++;
+            updateConnectionStatus();
+            try {
+                const response = await fetch(`/api/workflow/start-with-image/${prescriptionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageData: imageBase64 })
+                });
+                if (!response.ok) throw new Error('Failed to start workflow with image');
+                const result = await response.json();
+                console.log('Temporal workflow (with image) started:', result.workflowId);
+            } catch (error) {
+                console.error('Failed to start workflow with image:', error);
                 renderPrescriptions();
             } finally {
                 activeWorkflows--;
