@@ -158,6 +158,71 @@ namespace PBMAdjudication.Core
         }
 
         // ============================================================================
+        // SPECIALTY APPROVAL REQUESTS (GLP-1, v2+)
+        // ============================================================================
+
+        public async Task<SpecialtyApprovalRequest?> GetSpecialtyApprovalRequestAsync(string id)
+        {
+            using var conn = CreateConnection();
+            return await conn.QueryFirstOrDefaultAsync<SpecialtyApprovalRequest>(@"
+                SELECT
+                    id AS Id, prescription_id AS PrescriptionId,
+                    patient_name AS PatientName, medication AS Medication,
+                    requested_at AS RequestedAt,
+                    is_approved AS IsApproved, is_denied AS IsDenied, is_timed_out AS IsTimedOut
+                FROM specialty_approval_requests
+                WHERE id = @id",
+                new { id });
+        }
+
+        public async Task<SpecialtyApprovalRequest?> GetSpecialtyApprovalRequestByPrescriptionAsync(string prescriptionId)
+        {
+            using var conn = CreateConnection();
+            return await conn.QueryFirstOrDefaultAsync<SpecialtyApprovalRequest>(@"
+                SELECT
+                    id AS Id, prescription_id AS PrescriptionId,
+                    patient_name AS PatientName, medication AS Medication,
+                    requested_at AS RequestedAt,
+                    is_approved AS IsApproved, is_denied AS IsDenied, is_timed_out AS IsTimedOut
+                FROM specialty_approval_requests
+                WHERE prescription_id = @prescriptionId
+                ORDER BY requested_at DESC
+                LIMIT 1",
+                new { prescriptionId });
+        }
+
+        public async Task<IEnumerable<SpecialtyApprovalRequest>> GetPendingSpecialtyApprovalRequestsAsync()
+        {
+            using var conn = CreateConnection();
+            return await conn.QueryAsync<SpecialtyApprovalRequest>(@"
+                SELECT
+                    id AS Id, prescription_id AS PrescriptionId,
+                    patient_name AS PatientName, medication AS Medication,
+                    requested_at AS RequestedAt,
+                    is_approved AS IsApproved, is_denied AS IsDenied, is_timed_out AS IsTimedOut
+                FROM specialty_approval_requests
+                WHERE is_approved = FALSE AND is_denied = FALSE AND is_timed_out = FALSE
+                ORDER BY requested_at DESC");
+        }
+
+        public async Task UpsertSpecialtyApprovalRequestAsync(SpecialtyApprovalRequest request)
+        {
+            using var conn = CreateConnection();
+            await conn.ExecuteAsync(@"
+                INSERT INTO specialty_approval_requests
+                    (id, prescription_id, patient_name, medication,
+                     requested_at, is_approved, is_denied, is_timed_out)
+                VALUES
+                    (@Id, @PrescriptionId, @PatientName, @Medication,
+                     @RequestedAt, @IsApproved, @IsDenied, @IsTimedOut)
+                ON CONFLICT (id) DO UPDATE SET
+                    is_approved = EXCLUDED.is_approved,
+                    is_denied = EXCLUDED.is_denied,
+                    is_timed_out = EXCLUDED.is_timed_out",
+                request);
+        }
+
+        // ============================================================================
         // ENDPOINT CONFIGS
         // ============================================================================
 
@@ -215,6 +280,7 @@ namespace PBMAdjudication.Core
         public async Task ResetAsync()
         {
             using var conn = CreateConnection();
+            await conn.ExecuteAsync("DELETE FROM specialty_approval_requests");
             await conn.ExecuteAsync("DELETE FROM doctor_approval_requests");
             await conn.ExecuteAsync("DELETE FROM prescriptions");
             await conn.ExecuteAsync("DELETE FROM endpoint_configs");

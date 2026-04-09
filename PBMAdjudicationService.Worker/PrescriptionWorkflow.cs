@@ -1,4 +1,3 @@
-using Temporalio.Api.Update.V1;
 using Temporalio.Common;
 using Temporalio.Workflows;
 using PBMAdjudication.Core;
@@ -8,9 +7,17 @@ namespace PBMAdjudication.Worker
     [Workflow]
     public class PrescriptionWorkflow
     {
+        /// <summary>
+        /// Set at worker startup from the USE_GLP1_SPLIT environment variable.
+        /// false = v1 behavior (single-track, ignores IsGlp1 flag)
+        /// true  = v2 behavior (GLP-1 prescriptions split into parallel child workflows)
+        /// </summary>
+        public static bool UseGlp1Split { get; set; } = false;
+
         private bool approvalReceived = false;
         private bool approvalDenied = false;
-        private ActivityOptions DefaultActivityOptions = new()
+
+        private static readonly ActivityOptions DefaultActivityOptions = new()
         {
             StartToCloseTimeout = TimeSpan.FromMinutes(5),
             RetryPolicy = new RetryPolicy
@@ -22,7 +29,7 @@ namespace PBMAdjudication.Worker
             }
         };
 
-        private ActivityOptions NotificationActivityOptions = new()
+        private static readonly ActivityOptions NotificationActivityOptions = new()
         {
             StartToCloseTimeout = TimeSpan.FromMinutes(2),
             RetryPolicy = new RetryPolicy
@@ -40,9 +47,6 @@ namespace PBMAdjudication.Worker
             var result = new WorkflowResult { Success = false, Status = "Pending" };
 
             // Step 0: Validate Eligibility
-            // imageData is passed as a separate workflow argument so the ClaimCheckCodec
-            // can offload it independently — the Rx fields in `input` remain visible
-            // in Temporal history while only the image payload is claim-checked.
             try
             {
                 var validated = await Workflow.ExecuteActivityAsync(
@@ -54,10 +58,8 @@ namespace PBMAdjudication.Worker
                     result.Status = "Waiting";
                     var waitTime = validated.EligibleDate.Value - Workflow.UtcNow;
                     if (waitTime > TimeSpan.Zero)
-                    {
                         await Workflow.DelayAsync(waitTime);
-                    }
-                    // After waiting, validate again (no image needed for retry)
+
                     validated = await Workflow.ExecuteActivityAsync(
                         (PrescriptionActivities a) => a.ValidateEligibilityAsync(input.PrescriptionId),
                         DefaultActivityOptions);
@@ -87,6 +89,61 @@ namespace PBMAdjudication.Worker
             result.Status = "Authorized";
 
             // Step 2: Adjudicate Claim
+            // v2 behavior: GLP-1 prescriptions are split into two parallel child workflows —
+            // one for the standard line items (existing adjudication path) and one for the
+            // GLP-1 line item (specialty endpoint + mandatory specialty prior authorization).
+            // This structural change to the workflow DAG is what makes Worker Versioning
+            // necessary: a v1 execution cannot be replayed on v2 code without a
+            // non-determinism error.
+            if (input.IsGlp1 && UseGlp1Split)
+            {
+                try
+                {
+                    var standardTask = Workflow.ExecuteChildWorkflowAsync(
+                        (StandardAdjudicationWorkflow w) => w.RunAsync(input.PrescriptionId),
+                        new ChildWorkflowOptions
+                        {
+                            Id = $"{input.PrescriptionId}-standard"
+                        });
+
+                    var glp1Task = Workflow.ExecuteChildWorkflowAsync(
+                        (Glp1AdjudicationWorkflow w) => w.RunAsync(
+                            input.PrescriptionId, input.PatientName, input.Medication),
+                        new ChildWorkflowOptions
+                        {
+                            Id = $"{input.PrescriptionId}-glp1"
+                        });
+
+                    // Both tracks run in parallel; parent blocks until both complete.
+                    // The GLP-1 child may be parked on a specialty auth signal for
+                    // minutes (demo) or days (production).
+                    var results = await Task.WhenAll(standardTask, glp1Task);
+
+                    result.Copay = results.Sum(r => r.Copay);
+                    result.Success = results.All(r => r.Success);
+
+                    if (result.Success)
+                    {
+                        // Both tracks complete — submit to pharmacy and mark done
+                        await Workflow.ExecuteActivityAsync(
+                            (PrescriptionActivities a) => a.SubmitToPharmacyAsync(input.PrescriptionId),
+                            DefaultActivityOptions);
+                        result.Status = "Completed";
+                    }
+                    else
+                    {
+                        result.Status = "Denied";
+                    }
+                    return result;
+                }
+                catch (Temporalio.Exceptions.ActivityFailureException)
+                {
+                    await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 2);
+                    return result;
+                }
+            }
+
+            // Non-GLP-1 path: original single-track adjudication (unchanged from v1)
             try
             {
                 var adjudication = await Workflow.ExecuteActivityAsync(
@@ -102,7 +159,7 @@ namespace PBMAdjudication.Worker
                 return result;
             }
 
-            // Step 3: Doctor Approval (if needed)
+            // Step 3: Doctor Approval (if needed — 0 refills remaining)
             try
             {
                 var approvalResult = await Workflow.ExecuteActivityAsync(
@@ -131,8 +188,7 @@ namespace PBMAdjudication.Worker
                     // Wait up to 2 minutes for doctor approval
                     var receivedResponse = await Workflow.WaitConditionAsync(
                         () => approvalReceived || approvalDenied,
-                        TimeSpan.FromMinutes(2)
-                    );
+                        TimeSpan.FromMinutes(2));
 
                     if (!receivedResponse)
                     {
@@ -144,8 +200,7 @@ namespace PBMAdjudication.Worker
                         }
                         catch (Temporalio.Exceptions.ActivityFailureException)
                         {
-                            // API may be temporarily unavailable - workflow still completes
-                            // with ApprovalTimeout status. State will be reconciled when API recovers.
+                            // Best-effort — workflow still completes with ApprovalTimeout
                         }
 
                         result.Status = "ApprovalTimeout";
@@ -192,6 +247,7 @@ namespace PBMAdjudication.Worker
 
                 result.Status = "Completed";
                 result.Success = true;
+
                 try
                 {
                     await Workflow.ExecuteActivityAsync(
@@ -247,8 +303,7 @@ namespace PBMAdjudication.Worker
             }
             catch (Temporalio.Exceptions.ActivityFailureException)
             {
-                // API may be temporarily unavailable - workflow still completes
-                // with OnHold status. State will be reconciled when API recovers.
+                // Best-effort — state will be reconciled when API recovers
             }
         }
     }

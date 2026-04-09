@@ -110,6 +110,12 @@ namespace PBMAdjudicationService
                 return Results.Ok(approvals);
             });
 
+            app.MapGet("/api/specialty-approvals", async (IPrescriptionRepository repo) =>
+            {
+                var approvals = await repo.GetPendingSpecialtyApprovalRequestsAsync();
+                return Results.Ok(approvals);
+            });
+
             // Feature flags
             app.MapGet("/api/config/features",
                 (DynamicEncryptionCodec encCodec, DynamicClaimCheckCodec ccCodec) =>
@@ -417,12 +423,172 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { submitted = true });
             });
 
+            // GLP-1 SPECIALTY ENDPOINTS (v2+)
+            // ============================================================================
+
+            // STEP 3a: Adjudicate GLP-1 claim through specialty endpoint
+            app.MapPost("/api/adjudicate-glp1/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                prescription.Status = "AdjudicatingGlp1";
+                await repo.UpsertPrescriptionAsync(prescription);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"💊 [adjudicate-glp1] Routing {prescription.Medication} to specialty adjudication endpoint");
+
+                await endpointHelper.SimulateEndpointBehavior("adjudicate-glp1");
+                await Task.Delay(150);
+
+                prescription.Copay = Random.Shared.Next(50, 200); // GLP-1s carry higher copay
+                prescription.Status = "Adjudicated";
+                await repo.UpsertPrescriptionAsync(prescription);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"💊 [adjudicate-glp1] Specialty copay calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
+
+                return Results.Ok(new { copay = prescription.Copay });
+            });
+
+            // STEP 3b: Request GLP-1 specialty prior authorization (always required)
+            app.MapPost("/api/request-specialty-auth/{prescriptionId}", async (
+                string prescriptionId,
+                string patientName,
+                string medication,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                prescription.Status = "SpecialtyAuthPending";
+                await repo.UpsertPrescriptionAsync(prescription);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+
+                var specialtyRequest = new SpecialtyApprovalRequest
+                {
+                    PrescriptionId = prescriptionId,
+                    PatientName = patientName,
+                    Medication = medication
+                };
+                await repo.UpsertSpecialtyApprovalRequestAsync(specialtyRequest);
+                await hubContext.Clients.All.SendAsync("SpecialtyApprovalRequestUpdated", specialtyRequest);
+
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"🔬 [specialty-auth] GLP-1 specialty prior authorization requested for {patientName} — {medication}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"🔬 [specialty-auth] Regulatory requirement: CMS mandate effective Q1 2025 — all GLP-1 claims require clinical review");
+
+                return Results.Ok(new { specialtyAuthId = specialtyRequest.Id });
+            });
+
+            // Clinical reviewer approves/denies GLP-1 specialty authorization
+            app.MapPost("/api/specialty-approve/{specialtyAuthId}", async (
+                string specialtyAuthId,
+                bool approved,
+                IPrescriptionRepository repo,
+                [FromServices] ITemporalClient client,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var specialtyRequest = await repo.GetSpecialtyApprovalRequestAsync(specialtyAuthId);
+                if (specialtyRequest is null) return Results.NotFound();
+
+                var prescription = await repo.GetPrescriptionAsync(specialtyRequest.PrescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                // Signal the GLP-1 child workflow specifically — note the child workflow ID
+                var glp1WorkflowId = $"{specialtyRequest.PrescriptionId}-glp1";
+                var handle = client.GetWorkflowHandle(glp1WorkflowId);
+
+                if (approved)
+                {
+                    await handle.SignalAsync((Glp1AdjudicationWorkflow wf) => wf.SpecialtyApproveAsync());
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"✅ [temporal] Clinical reviewer approved GLP-1 specialty auth for {prescription.PatientName}");
+                    specialtyRequest.IsApproved = true;
+                    prescription.Status = "SpecialtyAuthApproved";
+                }
+                else
+                {
+                    await handle.SignalAsync((Glp1AdjudicationWorkflow wf) => wf.SpecialtyDenyAsync());
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"❌ [temporal] Clinical reviewer denied GLP-1 specialty auth for {prescription.PatientName}");
+                    specialtyRequest.IsDenied = true;
+                    prescription.Status = "Denied";
+                }
+
+                await repo.UpsertPrescriptionAsync(prescription);
+                await repo.UpsertSpecialtyApprovalRequestAsync(specialtyRequest);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("SpecialtyApprovalRequestUpdated", specialtyRequest);
+
+                return Results.Ok();
+            });
+
+            // GLP-1 specialty auth timeout handler
+            app.MapPost("/api/specialty-auth-timeout/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                var specialtyRequest = await repo.GetSpecialtyApprovalRequestByPrescriptionAsync(prescriptionId);
+                if (specialtyRequest is not null)
+                {
+                    specialtyRequest.IsTimedOut = true;
+                    await repo.UpsertSpecialtyApprovalRequestAsync(specialtyRequest);
+                    await hubContext.Clients.All.SendAsync("SpecialtyApprovalRequestUpdated", specialtyRequest);
+                }
+
+                prescription.Status = "SpecialtyAuthTimeout";
+                await repo.UpsertPrescriptionAsync(prescription);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"⏰ [specialty-auth] GLP-1 specialty authorization timed out for {prescription.PatientName} — no clinical reviewer response");
+
+                return Results.Ok();
+            });
+
+            // STEP 3c: Submit GLP-1 line to specialty pharmacy
+            app.MapPost("/api/submit-specialty/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                EndpointHelper endpointHelper,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                prescription.Status = "SubmittingSpecialty";
+                await repo.UpsertPrescriptionAsync(prescription);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"💊 [submit-specialty] Submitting GLP-1 line to specialty pharmacy for {prescription.PatientName}");
+
+                await endpointHelper.SimulateEndpointBehavior("submit-specialty");
+                await Task.Delay(100);
+
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"✅ [submit-specialty] GLP-1 specialty pharmacy submission complete for {prescription.PatientName}");
+
+                return Results.Ok(new { submitted = true });
+            });
+
             // Generate load
             app.MapPost("/api/admin/generate-load", async (
                 IPrescriptionRepository repo,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var medications = new[] { "Lipitor", "Metformin", "Lisinopril", "Atorvastatin", "Omeprazole", "Amlodipine", "Simvastatin" };
+                var glp1Medications = new[] { "Ozempic 0.5mg (semaglutide)", "Wegovy 2.4mg (semaglutide)", "Mounjaro 5mg (tirzepatide)", "Zepbound 5mg (tirzepatide)" };
                 var firstNames = new[] { "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara" };
                 var lastNames = new[] { "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez" };
 
@@ -434,11 +600,17 @@ namespace PBMAdjudicationService
                     else
                         eligibleDate = DateTime.UtcNow.AddMinutes(Random.Shared.Next(-120, 0));
 
+                    // Every 5th prescription is a GLP-1 (indices 4, 9, 14, 19)
+                    var isGlp1 = (i % 5 == 4);
+                    var medication = isGlp1
+                        ? glp1Medications[Random.Shared.Next(glp1Medications.Length)]
+                        : $"{medications[Random.Shared.Next(medications.Length)]} {Random.Shared.Next(10, 80)}mg";
+
                     var prescription = new Prescription
                     {
                         PatientId = $"P{100 + i}",
                         PatientName = $"{firstNames[Random.Shared.Next(firstNames.Length)]} {lastNames[Random.Shared.Next(lastNames.Length)]}",
-                        Medication = $"{medications[Random.Shared.Next(medications.Length)]} {Random.Shared.Next(10, 80)}mg",
+                        Medication = medication,
                         EligibleDate = eligibleDate,
                         RefillsRemaining = Random.Shared.Next(0, 4),
                         Status = "Pending"
@@ -448,7 +620,7 @@ namespace PBMAdjudicationService
                     await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 }
 
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"📦 [admin] Generated 20 test prescriptions");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"📦 [admin] Generated 20 test prescriptions (4 GLP-1)");
                 return Results.Ok(new { generated = 20 });
             });
 
@@ -478,6 +650,7 @@ namespace PBMAdjudicationService
             // Start Temporal workflow
             app.MapPost("/api/workflow/start/{prescriptionId}", async (
                 string prescriptionId,
+                bool isGlp1,
                 IPrescriptionRepository repo,
                 [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
@@ -491,9 +664,13 @@ namespace PBMAdjudicationService
                     PatientName    = prescription.PatientName,
                     Medication     = prescription.Medication,
                     EligibleDate   = prescription.EligibleDate,
-                    RefillsRemaining = prescription.RefillsRemaining
-                    // ImageData is set via the separate /api/workflow/start-with-image endpoint
+                    RefillsRemaining = prescription.RefillsRemaining,
+                    IsGlp1         = isGlp1
                 };
+
+                if (isGlp1)
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"💊 [temporal] GLP-1 detected — will use split-track adjudication on v2 workers");
 
                 var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
                 try
@@ -520,6 +697,7 @@ namespace PBMAdjudicationService
             // Start Temporal workflow with an attached image (claim check demo path)
             app.MapPost("/api/workflow/start-with-image/{prescriptionId}", async (
                 string prescriptionId,
+                bool isGlp1,
                 WorkflowStartWithImageRequest request,
                 IPrescriptionRepository repo,
                 [FromServices] ITemporalClient client,
@@ -535,11 +713,16 @@ namespace PBMAdjudicationService
                     PatientName      = prescription.PatientName,
                     Medication       = prescription.Medication,
                     EligibleDate     = prescription.EligibleDate,
-                    RefillsRemaining = prescription.RefillsRemaining
+                    RefillsRemaining = prescription.RefillsRemaining,
+                    IsGlp1           = isGlp1
                     // ImageData intentionally omitted — passed as a separate workflow
                     // argument so the ClaimCheckCodec only offloads the image payload,
                     // leaving the Rx fields visible in Temporal history.
                 };
+
+                if (isGlp1)
+                    await hubContext.Clients.All.SendAsync("ReceiveLog",
+                        $"💊 [temporal] GLP-1 detected — will use split-track adjudication on v2 workers");
 
                 var sizeKb = (request.ImageData?.Length ?? 0) * 3 / 4 / 1024; // rough base64 → bytes
                 var claimCheckNote = ccCodec.IsEnabled

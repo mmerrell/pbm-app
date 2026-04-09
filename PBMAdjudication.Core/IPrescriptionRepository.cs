@@ -17,6 +17,12 @@ namespace PBMAdjudication.Core
         Task<IEnumerable<DoctorApprovalRequest>> GetPendingApprovalRequestsAsync();
         Task UpsertApprovalRequestAsync(DoctorApprovalRequest request);
 
+        // Specialty Approval Requests (GLP-1, v2+)
+        Task<SpecialtyApprovalRequest?> GetSpecialtyApprovalRequestAsync(string id);
+        Task<SpecialtyApprovalRequest?> GetSpecialtyApprovalRequestByPrescriptionAsync(string prescriptionId);
+        Task<IEnumerable<SpecialtyApprovalRequest>> GetPendingSpecialtyApprovalRequestsAsync();
+        Task UpsertSpecialtyApprovalRequestAsync(SpecialtyApprovalRequest request);
+
         // Endpoint Configs
         Task<EndpointConfig> GetEndpointConfigAsync(string endpoint);
         Task<Dictionary<string, EndpointConfig>> GetAllEndpointConfigsAsync();
