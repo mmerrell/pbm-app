@@ -7,6 +7,13 @@ namespace PBMAdjudication.Worker
     [Workflow]
     public class PrescriptionWorkflow
     {
+        /// <summary>
+        /// Set at worker startup from the USE_GLP1_SPLIT environment variable.
+        /// false = v1 behavior (single-track, ignores IsGlp1 flag)
+        /// true  = v2 behavior (GLP-1 prescriptions split into parallel child workflows)
+        /// </summary>
+        public static bool UseGlp1Split { get; set; } = false;
+
         private bool approvalReceived = false;
         private bool approvalDenied = false;
 
@@ -88,7 +95,7 @@ namespace PBMAdjudication.Worker
             // This structural change to the workflow DAG is what makes Worker Versioning
             // necessary: a v1 execution cannot be replayed on v2 code without a
             // non-determinism error.
-            if (input.IsGlp1)
+            if (input.IsGlp1 && UseGlp1Split)
             {
                 try
                 {

@@ -40,10 +40,18 @@ Console.WriteLine(enableClaimCheck
 var buildId        = builder.Configuration["BUILD_ID"] ?? "1.0";
 var deploymentName = builder.Configuration["DEPLOYMENT_NAME"] ?? "pbm-adjudication";
 var useVersioning  = builder.Configuration.GetValue<bool>("USE_VERSIONING");
+var useGlp1Split   = builder.Configuration.GetValue<bool>("USE_GLP1_SPLIT");
+
+// Make the flag available to workflow code via a static — workflows are
+// instantiated by the Temporal worker and can't receive DI constructor args.
+PrescriptionWorkflow.UseGlp1Split = useGlp1Split;
 
 Console.WriteLine(useVersioning
     ? $"[Versioning] ENABLED — deployment: {deploymentName}, build: {buildId}"
     : "[Versioning] DISABLED — running unversioned worker");
+Console.WriteLine(useGlp1Split
+    ? "[GLP-1] Split-track adjudication ENABLED (v2 path)"
+    : "[GLP-1] Split-track adjudication DISABLED (v1 path — standard single-track)");
 // ─────────────────────────────────────────────────────────────────────────────
 
 var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";
