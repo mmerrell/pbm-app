@@ -44,6 +44,17 @@ namespace PBMAdjudication.Core
                     is_denied BOOLEAN NOT NULL DEFAULT FALSE
                 );
 
+                CREATE TABLE IF NOT EXISTS specialty_approval_requests (
+                    id TEXT PRIMARY KEY,
+                    prescription_id TEXT NOT NULL,
+                    patient_name TEXT NOT NULL,
+                    medication TEXT NOT NULL,
+                    requested_at TIMESTAMPTZ NOT NULL,
+                    is_approved BOOLEAN NOT NULL DEFAULT FALSE,
+                    is_denied BOOLEAN NOT NULL DEFAULT FALSE,
+                    is_timed_out BOOLEAN NOT NULL DEFAULT FALSE
+                );
+
                 CREATE TABLE IF NOT EXISTS endpoint_configs (
                     endpoint TEXT PRIMARY KEY,
                     failure_rate_percent INT NOT NULL DEFAULT 0,
@@ -108,6 +119,15 @@ namespace PBMAdjudication.Core
                     RefillsRemaining = 1,
                     Status = "Pending"
                 },
+                new Prescription
+                {
+                    PatientId = "P006",
+                    PatientName = "Linda Martinez",
+                    Medication = "Ozempic 0.5mg (semaglutide)",
+                    EligibleDate = DateTime.UtcNow.AddDays(-1),
+                    RefillsRemaining = 0,
+                    Status = "Pending"
+                },
             };
 
             foreach (var rx in prescriptions)
@@ -126,7 +146,7 @@ namespace PBMAdjudication.Core
             }
 
             // Seed default endpoint configs
-            var endpoints = new[] { "validate", "authorize", "adjudicate", "notify", "submit" };
+            var endpoints = new[] { "validate", "authorize", "adjudicate", "adjudicate-glp1", "notify", "submit", "submit-specialty" };
             foreach (var endpoint in endpoints)
             {
                 await conn.ExecuteAsync(@"

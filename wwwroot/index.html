@@ -34,6 +34,11 @@
             --cyan:        #06b6d4;
             --cyan-bg:     rgba(6, 182, 212, 0.12);
 
+            /* GLP-1 specialty track color — teal, distinct from amber doctor approval */
+            --teal:        #14b8a6;
+            --teal-bg:     rgba(20, 184, 166, 0.12);
+            --teal-border: rgba(20, 184, 166, 0.30);
+
             --radius-sm:   4px;
             --radius:      8px;
             --radius-lg:   12px;
@@ -127,9 +132,7 @@
             transition: border-color 0.2s;
         }
 
-        .prescription-card:hover {
-            border-color: var(--border-uv);
-        }
+        .prescription-card:hover { border-color: var(--border-uv); }
 
         .prescription-card.status-completed {
             border-left-color: var(--green);
@@ -146,6 +149,12 @@
             background: linear-gradient(135deg, var(--space-2) 0%, rgba(245, 158, 11, 0.04) 100%);
         }
 
+        /* GLP-1 cards get a teal left border while in the specialty track */
+        .prescription-card.status-glp1 {
+            border-left-color: var(--teal);
+            background: linear-gradient(135deg, var(--space-2) 0%, rgba(20, 184, 166, 0.04) 100%);
+        }
+
         .prescription-card h3 {
             margin-bottom: 4px;
             color: var(--off-white);
@@ -159,6 +168,25 @@
             font-weight: 600;
             color: var(--uv);
             margin-bottom: 10px;
+            font-family: var(--font-mono);
+        }
+
+        .prescription-card.status-glp1 .medication { color: var(--teal); }
+
+        /* GLP-1 badge on medication line */
+        .glp1-badge {
+            display: inline-block;
+            background: var(--teal-bg);
+            color: var(--teal);
+            border: 1px solid var(--teal-border);
+            border-radius: var(--radius-sm);
+            padding: 1px 6px;
+            font-size: 9px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            margin-left: 6px;
+            vertical-align: middle;
             font-family: var(--font-mono);
         }
 
@@ -241,57 +269,24 @@
             color: var(--muted);
         }
 
-        .timeline-pip.completed {
-            background: var(--green-bg);
-            border-color: var(--green);
-            color: var(--green);
-        }
-
-        .timeline-pip.current {
-            width: 20px;
-            height: 20px;
-            background: var(--uv-subtle);
-            border-color: var(--uv);
-            border-width: 2px;
-            color: var(--uv);
-            animation: pulse 2s infinite;
-        }
-
-        .timeline-pip.failed {
-            background: var(--red-bg);
-            border-color: var(--red);
-            color: var(--red);
-        }
-
-        .timeline-pip.infra-failed {
-            background: var(--amber-bg);
-            border-color: var(--amber);
-            color: var(--amber);
-        }
-
-        .timeline-pip.waiting {
-            background: var(--amber-bg);
-            border-color: var(--amber);
-            color: var(--amber);
-        }
-
-        .timeline-pip.skipped {
-            background: var(--space-3);
-            border-color: var(--space-4);
-            color: var(--space-4);
-            font-size: 8px;
-        }
-
-        .timeline-pip.retrying {
-            background: var(--cyan-bg);
-            border-color: var(--cyan);
-            color: var(--cyan);
-            animation: pulse 1s infinite;
-        }
+        .timeline-pip.completed  { background: var(--green-bg); border-color: var(--green); color: var(--green); }
+        .timeline-pip.current    { width: 20px; height: 20px; background: var(--uv-subtle); border-color: var(--uv); border-width: 2px; color: var(--uv); animation: pulse 2s infinite; }
+        .timeline-pip.failed     { background: var(--red-bg);   border-color: var(--red);   color: var(--red); }
+        .timeline-pip.infra-failed { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+        .timeline-pip.waiting    { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
+        .timeline-pip.skipped    { background: var(--space-3);  border-color: var(--space-4); color: var(--space-4); font-size: 8px; }
+        .timeline-pip.retrying   { background: var(--cyan-bg);  border-color: var(--cyan); color: var(--cyan); animation: pulse 1s infinite; }
+        /* Teal pip for GLP-1 specialty auth waiting state */
+        .timeline-pip.specialty  { background: var(--teal-bg);  border-color: var(--teal); color: var(--teal); animation: pulse-teal 2s infinite; }
 
         @keyframes pulse {
             0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--uv-glow); }
-            50% { transform: scale(1.1); box-shadow: 0 0 0 4px transparent; }
+            50%       { transform: scale(1.1); box-shadow: 0 0 0 4px transparent; }
+        }
+
+        @keyframes pulse-teal {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(20, 184, 166, 0.35); }
+            50%       { transform: scale(1.1); box-shadow: 0 0 0 4px transparent; }
         }
 
         .timeline-label {
@@ -306,6 +301,11 @@
             border-radius: 10px;
             font-family: var(--font-mono);
             letter-spacing: 0.02em;
+        }
+
+        .timeline-label.teal {
+            background: var(--teal);
+            color: #fff;
         }
 
         .timeline-tooltip {
@@ -328,10 +328,10 @@
         }
 
         .timeline-step:first-child .timeline-tooltip { left: 0; transform: none; }
-        .timeline-step:last-child .timeline-tooltip { left: auto; right: 0; transform: none; }
+        .timeline-step:last-child  .timeline-tooltip { left: auto; right: 0; transform: none; }
         .timeline-step:hover .timeline-tooltip { display: block; }
 
-        /* ─── Doctor Portal ─────────────────────────────────────── */
+        /* ─── Doctor Portal Cards ───────────────────────────────── */
         .approval-card {
             background: var(--space-2);
             border: 1px solid var(--amber-bg);
@@ -341,26 +341,47 @@
             border-radius: var(--radius);
         }
 
-        .approval-card h3 {
-            margin-bottom: 4px;
-            color: var(--off-white);
-            font-size: 14px;
-            font-weight: 600;
-        }
+        .approval-card h3 { margin-bottom: 4px; color: var(--off-white); font-size: 14px; font-weight: 600; }
 
         .approval-card .medication {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--amber);
-            margin-bottom: 6px;
-            font-family: var(--font-mono);
+            font-size: 13px; font-weight: 600; color: var(--amber);
+            margin-bottom: 6px; font-family: var(--font-mono);
         }
 
-        .approval-card .timestamp {
-            font-size: 11px;
-            color: var(--muted);
-            margin-bottom: 8px;
-            font-family: var(--font-mono);
+        .approval-card .timestamp { font-size: 11px; color: var(--muted); margin-bottom: 8px; font-family: var(--font-mono); }
+
+        /* Specialty prior auth card — teal, visually distinct from amber doctor card */
+        .specialty-card {
+            background: var(--space-2);
+            border: 1px solid var(--teal-border);
+            border-left: 3px solid var(--teal);
+            padding: 14px;
+            margin-bottom: 10px;
+            border-radius: var(--radius);
+        }
+
+        .specialty-card h3 { margin-bottom: 4px; color: var(--off-white); font-size: 14px; font-weight: 600; }
+
+        .specialty-card .medication {
+            font-size: 13px; font-weight: 600; color: var(--teal);
+            margin-bottom: 4px; font-family: var(--font-mono);
+        }
+
+        .specialty-card .specialty-label {
+            font-size: 10px; font-weight: 700; color: var(--teal);
+            text-transform: uppercase; letter-spacing: 0.08em;
+            background: var(--teal-bg); border: 1px solid var(--teal-border);
+            display: inline-block; padding: 2px 8px; border-radius: var(--radius-sm);
+            margin-bottom: 8px; font-family: var(--font-mono);
+        }
+
+        .specialty-card .timestamp { font-size: 11px; color: var(--muted); margin-bottom: 8px; font-family: var(--font-mono); }
+
+        .specialty-card .regulatory-note {
+            font-size: 10px; color: var(--muted); font-family: var(--font-mono);
+            background: var(--space-3); border: 1px solid var(--border);
+            padding: 6px 8px; border-radius: var(--radius-sm); margin-bottom: 10px;
+            line-height: 1.5;
         }
 
         .approval-buttons { display: flex; gap: 8px; }
@@ -378,686 +399,223 @@
             letter-spacing: 0.02em;
         }
 
-        .btn-approve {
-            background: var(--green-bg);
-            color: var(--green);
-            border: 1px solid rgba(34, 197, 94, 0.3);
-            flex: 1;
-        }
+        .btn-approve { background: var(--green-bg); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.3); flex: 1; }
+        .btn-approve:hover { background: rgba(34, 197, 94, 0.2); border-color: var(--green); }
 
-        .btn-approve:hover {
-            background: rgba(34, 197, 94, 0.2);
-            border-color: var(--green);
-        }
+        .btn-deny { background: var(--red-bg); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); flex: 1; }
+        .btn-deny:hover { background: rgba(239, 68, 68, 0.2); border-color: var(--red); }
 
-        .btn-deny {
-            background: var(--red-bg);
-            color: var(--red);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            flex: 1;
-        }
-
-        .btn-deny:hover {
-            background: rgba(239, 68, 68, 0.2);
-            border-color: var(--red);
-        }
-
-        .btn-new-request {
-            background: var(--uv);
-            color: white;
-            border: none;
-            padding: 6px 14px;
-            font-size: 12px;
-            font-weight: 600;
-            border-radius: var(--radius-sm);
-        }
-
+        .btn-new-request { background: var(--uv); color: white; border: none; padding: 6px 14px; font-size: 12px; font-weight: 600; border-radius: var(--radius-sm); }
         .btn-new-request:hover { background: var(--uv-dim); }
 
         /* ─── Empty State ────────────────────────────────────────── */
-        .empty-state {
-            text-align: center;
+        .empty-state { text-align: center; color: var(--muted); padding: 48px 20px; font-size: 13px; font-family: var(--font-mono); }
+
+        /* ─── Divider between approval sections ─────────────────── */
+        .portal-section-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.10em;
             color: var(--muted);
-            padding: 48px 20px;
-            font-size: 13px;
+            padding: 4px 0 8px;
+            margin-bottom: 4px;
+            border-bottom: 1px solid var(--border);
+            margin-top: 6px;
             font-family: var(--font-mono);
         }
 
-        /* ─── Modal ─────────────────────────────────────────────── */
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            inset: 0;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(4px);
-            align-items: center;
-            justify-content: center;
-        }
+        .portal-section-label:first-child { margin-top: 0; }
 
+        /* ─── Modal ─────────────────────────────────────────────── */
+        .modal { display: none; position: fixed; z-index: 1000; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
         .modal.show { display: flex; }
 
-        .modal-content {
-            background: var(--space-2);
-            border: 1px solid var(--border);
-            padding: 28px;
-            border-radius: var(--radius-lg);
-            max-width: 480px;
-            width: 90%;
-            box-shadow: 0 24px 48px rgba(0,0,0,0.5);
-        }
-
-        .modal-header {
-            font-size: 18px;
-            font-weight: 700;
-            margin-bottom: 20px;
-            color: var(--off-white);
-        }
+        .modal-content { background: var(--space-2); border: 1px solid var(--border); padding: 28px; border-radius: var(--radius-lg); max-width: 480px; width: 90%; box-shadow: 0 24px 48px rgba(0,0,0,0.5); }
+        .modal-header { font-size: 18px; font-weight: 700; margin-bottom: 20px; color: var(--off-white); }
 
         .form-group { margin-bottom: 14px; }
 
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 6px;
-            color: var(--muted);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
+        .form-group label { display: block; font-weight: 600; margin-bottom: 6px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
 
         .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 9px 12px;
-            background: var(--space-3);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            color: var(--off-white);
-            font-size: 13px;
-            font-family: var(--font-sans);
-            transition: border-color 0.15s;
-        }
+        .form-group select { width: 100%; padding: 9px 12px; background: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--off-white); font-size: 13px; font-family: var(--font-sans); transition: border-color 0.15s; }
 
         .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: var(--uv);
-            box-shadow: 0 0 0 3px var(--uv-glow);
-        }
+        .form-group select:focus { outline: none; border-color: var(--uv); box-shadow: 0 0 0 3px var(--uv-glow); }
 
         .form-group select option { background: var(--space-3); }
 
-        /* ─── File Upload ────────────────────────────────────────── */
-        .file-upload-area {
-            border: 1px dashed var(--border);
-            border-radius: var(--radius-sm);
-            background: var(--space-3);
-            padding: 12px;
-            cursor: pointer;
-            transition: border-color 0.15s, background 0.15s;
-            position: relative;
-        }
-
-        .file-upload-area:hover,
-        .file-upload-area.has-file {
-            border-color: var(--uv);
-            background: var(--uv-subtle);
-        }
-
-        .file-upload-area input[type="file"] {
-            position: absolute;
-            inset: 0;
-            opacity: 0;
-            cursor: pointer;
-            width: 100%;
-            height: 100%;
-            padding: 0;
-            border: none;
-            background: transparent;
-        }
-
-        .file-upload-label {
+        /* GLP-1 checkbox row in modal */
+        .glp1-checkbox-row {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            padding: 10px 12px;
+            background: var(--space-3);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .glp1-checkbox-row:has(input:checked) {
+            border-color: var(--teal);
+            background: var(--teal-bg);
+        }
+
+        .glp1-checkbox-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--teal);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .glp1-checkbox-label {
             font-size: 12px;
+            color: var(--off-white);
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .glp1-checkbox-label span {
+            display: block;
+            font-size: 10px;
             color: var(--muted);
             font-family: var(--font-mono);
-            pointer-events: none;
+            margin-top: 2px;
         }
 
-        .file-upload-label .file-icon {
-            font-size: 16px;
-            line-height: 1;
-        }
-
-        .file-upload-label.file-selected {
-            color: var(--uv);
-        }
-
-        .file-size-warning {
-            margin-top: 6px;
-            font-size: 10px;
-            font-family: var(--font-mono);
-            display: none;
-        }
-
+        /* ─── File Upload ────────────────────────────────────────── */
+        .file-upload-area { border: 1px dashed var(--border); border-radius: var(--radius-sm); background: var(--space-3); padding: 12px; cursor: pointer; transition: border-color 0.15s, background 0.15s; position: relative; }
+        .file-upload-area:hover, .file-upload-area.has-file { border-color: var(--uv); background: var(--uv-subtle); }
+        .file-upload-area input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; padding: 0; border: none; background: transparent; }
+        .file-upload-label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); font-family: var(--font-mono); pointer-events: none; }
+        .file-upload-label .file-icon { font-size: 16px; line-height: 1; }
+        .file-upload-label.file-selected { color: var(--uv); }
+        .file-size-warning { margin-top: 6px; font-size: 10px; font-family: var(--font-mono); display: none; }
         .file-size-warning.show { display: block; }
         .file-size-warning.over-threshold { color: var(--amber); }
         .file-size-warning.under-threshold { color: var(--muted); }
 
         /* ─── Modal Buttons ──────────────────────────────────────── */
         .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
-
-        .btn-submit {
-            flex: 1;
-            background: var(--uv);
-            color: white;
-            padding: 10px;
-            border-radius: var(--radius-sm);
-            border: none;
-        }
-
+        .btn-submit { flex: 1; background: var(--uv); color: white; padding: 10px; border-radius: var(--radius-sm); border: none; cursor: pointer; font-weight: 600; font-family: var(--font-sans); }
         .btn-submit:hover { background: var(--uv-dim); }
-
-        .btn-cancel {
-            flex: 1;
-            background: var(--space-3);
-            color: var(--muted);
-            padding: 10px;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
-        }
-
+        .btn-cancel { flex: 1; background: var(--space-3); color: var(--muted); padding: 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); cursor: pointer; font-weight: 600; font-family: var(--font-sans); }
         .btn-cancel:hover { color: var(--off-white); border-color: var(--space-4); }
 
         /* ─── Confirm Modal ──────────────────────────────────────── */
-        .confirm-modal {
-            display: none;
-            position: fixed;
-            z-index: 2000;
-            inset: 0;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(4px);
-            align-items: center;
-            justify-content: center;
-        }
-
+        .confirm-modal { display: none; position: fixed; z-index: 2000; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
         .confirm-modal.show { display: flex; }
-
-        .confirm-content {
-            background: var(--space-2);
-            border: 1px solid var(--border);
-            padding: 28px;
-            border-radius: var(--radius-lg);
-            max-width: 380px;
-            width: 90%;
-            box-shadow: 0 24px 48px rgba(0,0,0,0.5);
-            text-align: center;
-        }
-
-        .confirm-message {
-            font-size: 14px;
-            color: var(--off-white);
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-
+        .confirm-content { background: var(--space-2); border: 1px solid var(--border); padding: 28px; border-radius: var(--radius-lg); max-width: 380px; width: 90%; box-shadow: 0 24px 48px rgba(0,0,0,0.5); text-align: center; }
+        .confirm-message { font-size: 14px; color: var(--off-white); margin-bottom: 20px; line-height: 1.5; }
         .confirm-buttons { display: flex; gap: 10px; }
-
-        .btn-confirm-yes {
-            flex: 1;
-            background: var(--red-bg);
-            color: var(--red);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-            padding: 10px;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: 600;
-            font-family: var(--font-sans);
-            font-size: 13px;
-        }
-
+        .btn-confirm-yes { flex: 1; background: var(--red-bg); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); padding: 10px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-family: var(--font-sans); font-size: 13px; }
         .btn-confirm-yes:hover { background: rgba(239, 68, 68, 0.2); border-color: var(--red); }
-
-        .btn-confirm-no {
-            flex: 1;
-            background: var(--space-3);
-            color: var(--muted);
-            border: 1px solid var(--border);
-            padding: 10px;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: 600;
-            font-family: var(--font-sans);
-            font-size: 13px;
-        }
-
+        .btn-confirm-no { flex: 1; background: var(--space-3); color: var(--muted); border: 1px solid var(--border); padding: 10px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-family: var(--font-sans); font-size: 13px; }
         .btn-confirm-no:hover { color: var(--off-white); }
 
         /* ─── Control Panel ──────────────────────────────────────── */
-        .admin-section {
-            margin-bottom: 14px;
-            padding-bottom: 14px;
-            border-bottom: 1px solid var(--border);
-        }
-
+        .admin-section { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
         .admin-buttons { display: flex; gap: 8px; }
-
-        .btn-admin {
-            flex: 1;
-            padding: 9px;
-            background: var(--uv);
-            color: white;
-            border: none;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 12px;
-            font-family: var(--font-sans);
-            letter-spacing: 0.02em;
-            transition: background 0.15s;
-        }
-
+        .btn-admin { flex: 1; padding: 9px; background: var(--uv); color: white; border: none; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 12px; font-family: var(--font-sans); letter-spacing: 0.02em; transition: background 0.15s; }
         .btn-admin:hover { background: var(--uv-dim); }
-
-        .btn-reset {
-            background: var(--red-bg);
-            color: var(--red);
-            border: 1px solid rgba(239, 68, 68, 0.3);
-        }
-
+        .btn-reset { background: var(--red-bg); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); }
         .btn-reset:hover { background: rgba(239, 68, 68, 0.2); }
 
         /* ─── Endpoint Config ────────────────────────────────────── */
-        .endpoint-config {
-            background: var(--space-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 10px 12px;
-            margin-bottom: 8px;
-        }
-
-        .endpoint-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .endpoint-config h3 {
-            color: var(--off-white);
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            font-weight: 600;
-            margin: 0;
-        }
-
+        .endpoint-config { background: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; }
+        .endpoint-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .endpoint-config h3 { color: var(--off-white); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; margin: 0; }
         .control-group { margin-bottom: 6px; }
+        .control-label { display: block; font-size: 10px; color: var(--muted); margin-bottom: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+        .slider-container { display: flex; align-items: center; gap: 8px; }
 
-        .control-label {
-            display: block;
-            font-size: 10px;
-            color: var(--muted);
-            margin-bottom: 4px;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .slider-container {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        input[type="range"] {
-            flex: 1;
-            height: 3px;
-            border-radius: 2px;
-            background: var(--space-4);
-            outline: none;
-            -webkit-appearance: none;
-            cursor: pointer;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 13px;
-            height: 13px;
-            border-radius: 50%;
-            background: var(--uv);
-            cursor: pointer;
-            border: 2px solid var(--space-1);
-            box-shadow: 0 0 0 1px var(--uv);
-            transition: transform 0.15s;
-        }
-
+        input[type="range"] { flex: 1; height: 3px; border-radius: 2px; background: var(--space-4); outline: none; -webkit-appearance: none; cursor: pointer; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%; background: var(--uv); cursor: pointer; border: 2px solid var(--space-1); box-shadow: 0 0 0 1px var(--uv); transition: transform 0.15s; }
         input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
-
-        .slider-value {
-            min-width: 48px;
-            text-align: right;
-            font-weight: 600;
-            color: var(--uv);
-            font-size: 11px;
-            font-family: var(--font-mono);
-        }
+        .slider-value { min-width: 48px; text-align: right; font-weight: 600; color: var(--uv); font-size: 11px; font-family: var(--font-mono); }
 
         /* ─── Toggle Switch ──────────────────────────────────────── */
-        .toggle-switch {
-            position: relative;
-            width: 40px;
-            height: 20px;
-        }
-
+        .toggle-switch { position: relative; width: 40px; height: 20px; }
         .toggle-switch input { opacity: 0; width: 0; height: 0; }
-
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            inset: 0;
-            background: var(--green);
-            transition: .25s;
-            border-radius: 20px;
-        }
-
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 14px;
-            width: 14px;
-            left: 3px;
-            bottom: 3px;
-            background: white;
-            transition: .25s;
-            border-radius: 50%;
-        }
-
+        .toggle-slider { position: absolute; cursor: pointer; inset: 0; background: var(--green); transition: .25s; border-radius: 20px; }
+        .toggle-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background: white; transition: .25s; border-radius: 50%; }
         input:checked + .toggle-slider { background: var(--red); }
         input:checked + .toggle-slider:before { transform: translateX(20px); }
-
-        /* Feature flag toggles: unchecked = red (off), checked = green (on) */
         .feature-flag-toggle .toggle-slider { background: var(--red); }
         .feature-flag-toggle input:checked + .toggle-slider { background: var(--green); }
 
         /* ─── Logs ───────────────────────────────────────────────── */
         .logs-section { margin-top: 14px; }
+        .logs-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .logs-header h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+        .btn-clear-logs { padding: 3px 10px; background: var(--space-3); color: var(--muted); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; font-size: 10px; font-family: var(--font-sans); transition: color 0.15s; }
+        .btn-clear-logs:hover { color: var(--off-white); }
+        .logs-container { background: var(--space); border: 1px solid var(--border); color: #c4c4d4; padding: 10px 12px; border-radius: var(--radius); height: 200px; overflow-y: auto; font-family: var(--font-mono); font-size: 10.5px; line-height: 1.5; scrollbar-width: thin; scrollbar-color: var(--space-4) transparent; }
+        .logs-container::-webkit-scrollbar { width: 3px; }
+        .logs-container::-webkit-scrollbar-thumb { background: var(--space-4); }
+        .log-entry { margin-bottom: 2px; word-wrap: break-word; color: var(--muted); }
+        .log-entry::before { content: '› '; color: var(--uv); }
 
-        .logs-header {
-            display: flex;
-            justify-content: space-between;
+        /* ─── Connection Status ──────────────────────────────────── */
+        .connection-status { position: fixed; top: 12px; right: 12px; padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 600; font-family: var(--font-mono); z-index: 1000; cursor: pointer; transition: all 0.2s; user-select: none; letter-spacing: 0.04em; border: 1px solid; }
+        .connection-status:hover { transform: translateY(-1px); }
+        .connection-status.connected    { background: var(--green-bg); color: var(--green); border-color: rgba(34, 197, 94, 0.3); }
+        .connection-status.disconnected { background: var(--red-bg);   color: var(--red);   border-color: rgba(239, 68, 68, 0.3); }
+        .connection-status.auto-mode    { background: var(--uv-subtle); color: var(--uv);   border-color: var(--border-uv); }
+
+        /* ─── Status Tooltip ─────────────────────────────────────── */
+        .status-tooltip { position: fixed; background: var(--space-2); border: 1px solid var(--border); color: var(--off-white); padding: 10px 14px; border-radius: var(--radius); font-size: 11px; font-family: var(--font-mono); z-index: 1001; display: none; max-width: 200px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); line-height: 1.6; }
+        .status-tooltip.show { display: block; }
+
+        /* ─── Notification badges ────────────────────────────────── */
+        .notif-badge { margin-top: 8px; padding: 5px 8px; border-radius: var(--radius-sm); font-size: 10px; font-family: var(--font-mono); display: flex; align-items: center; gap: 5px; }
+        .notif-badge.retrying { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.25); }
+        .notif-badge.failed   { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(239, 68, 68, 0.25); }
+        .notif-badge.sent     { background: var(--green-bg); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.25); }
+
+        .workflow-link {
+            display: inline-flex;
             align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .logs-header h3 {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            font-weight: 600;
-        }
-
-        .btn-clear-logs {
-            padding: 3px 10px;
-            background: var(--space-3);
-            color: var(--muted);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-sm);
-            cursor: pointer;
+            gap: 4px;
             font-size: 10px;
-            font-family: var(--font-sans);
+            font-family: var(--font-mono);
+            color: var(--muted);
+            text-decoration: none;
+            margin-bottom: 8px;
             transition: color 0.15s;
         }
 
-        .btn-clear-logs:hover { color: var(--off-white); }
-
-        .logs-container {
-            background: var(--space);
-            border: 1px solid var(--border);
-            color: #c4c4d4;
-            padding: 10px 12px;
-            border-radius: var(--radius);
-            height: 200px;
-            overflow-y: auto;
-            font-family: var(--font-mono);
-            font-size: 10.5px;
-            line-height: 1.5;
-            scrollbar-width: thin;
-            scrollbar-color: var(--space-4) transparent;
-        }
-
-        .logs-container::-webkit-scrollbar { width: 3px; }
-        .logs-container::-webkit-scrollbar-thumb { background: var(--space-4); }
-
-        .log-entry {
-            margin-bottom: 2px;
-            word-wrap: break-word;
-            color: var(--muted);
-        }
-
-        .log-entry::before {
-            content: '› ';
-            color: var(--uv);
-        }
-
-        /* ─── Connection Status ──────────────────────────────────── */
-        .connection-status {
-            position: fixed;
-            top: 12px;
-            right: 12px;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            font-family: var(--font-mono);
-            z-index: 1000;
-            cursor: pointer;
-            transition: all 0.2s;
-            user-select: none;
-            letter-spacing: 0.04em;
-            border: 1px solid;
-        }
-
-        .connection-status:hover { transform: translateY(-1px); }
-
-        .connection-status.connected {
-            background: var(--green-bg);
-            color: var(--green);
-            border-color: rgba(34, 197, 94, 0.3);
-        }
-
-        .connection-status.disconnected {
-            background: var(--red-bg);
-            color: var(--red);
-            border-color: rgba(239, 68, 68, 0.3);
-        }
-
-        .connection-status.auto-mode {
-            background: var(--uv-subtle);
-            color: var(--uv);
-            border-color: var(--border-uv);
-        }
-
-        /* ─── Status Tooltip ─────────────────────────────────────── */
-        .status-tooltip {
-            position: fixed;
-            background: var(--space-2);
-            border: 1px solid var(--border);
-            color: var(--off-white);
-            padding: 10px 14px;
-            border-radius: var(--radius);
-            font-size: 11px;
-            font-family: var(--font-mono);
-            z-index: 1001;
-            display: none;
-            max-width: 200px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-            line-height: 1.6;
-        }
-
-        .status-tooltip.show { display: block; }
-
-        /* ─── Notification status inline badges ──────────────────── */
-        .notif-badge {
-            margin-top: 8px;
-            padding: 5px 8px;
-            border-radius: var(--radius-sm);
-            font-size: 10px;
-            font-family: var(--font-mono);
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        .notif-badge.retrying  { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.25); }
-        .notif-badge.failed    { background: var(--red-bg);   color: var(--red);   border: 1px solid rgba(239, 68, 68, 0.25); }
-        .notif-badge.sent      { background: var(--green-bg); color: var(--green); border: 1px solid rgba(34, 197, 94, 0.25); }
+        .workflow-link:hover { color: var(--uv); }
 
         /* ─── Process button ─────────────────────────────────────── */
-        .btn-process {
-            width: 100%;
-            margin-top: 8px;
-            padding: 7px;
-            background: var(--uv-subtle);
-            color: var(--uv);
-            border: 1px solid var(--border-uv);
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            font-weight: 600;
-            font-size: 11px;
-            font-family: var(--font-sans);
-            letter-spacing: 0.04em;
-            transition: all 0.15s;
-        }
-
-        .btn-process:hover {
-            background: var(--uv);
-            color: white;
-            border-color: var(--uv);
-        }
+        .btn-process { width: 100%; margin-top: 8px; padding: 7px; background: var(--uv-subtle); color: var(--uv); border: 1px solid var(--border-uv); border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 11px; font-family: var(--font-sans); letter-spacing: 0.04em; transition: all 0.15s; }
+        .btn-process:hover { background: var(--uv); color: white; border-color: var(--uv); }
 
         /* ─── Feature Flags ──────────────────────────────────────── */
-        .feature-flags-section {
-            margin-bottom: 14px;
-            padding-bottom: 14px;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .feature-flags-title {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-            font-weight: 600;
-            margin-bottom: 10px;
-        }
-
-        .feature-flag-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 8px 12px;
-            background: var(--space-2);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 6px;
-        }
-
-        .feature-flag-info {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .feature-flag-name {
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--off-white);
-        }
-
-        .feature-flag-desc {
-            font-size: 10px;
-            color: var(--muted);
-            font-family: var(--font-mono);
-        }
+        .feature-flags-section { margin-bottom: 14px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+        .feature-flags-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; margin-bottom: 10px; }
+        .feature-flag-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px; }
+        .feature-flag-info { display: flex; flex-direction: column; gap: 2px; }
+        .feature-flag-name { font-size: 12px; font-weight: 600; color: var(--off-white); }
+        .feature-flag-desc { font-size: 10px; color: var(--muted); font-family: var(--font-mono); }
 
         /* ─── Version Badge ──────────────────────────────────────── */
-        .version-badge {
-            position: fixed;
-            bottom: 16px;
-            right: 16px;
-            background: var(--space-2);
-            border-radius: var(--radius);
-            padding: 10px 14px;
-            box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-family: var(--font-mono);
-            font-weight: 600;
-            font-size: 12px;
-            border: 1px solid;
-            letter-spacing: 0.06em;
-            text-decoration: none;
-            color: inherit;
-        }
+        .version-badge { position: fixed; bottom: 16px; right: 16px; background: var(--space-2); border-radius: var(--radius); padding: 10px 14px; box-shadow: 0 4px 16px rgba(0,0,0,0.4); cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; z-index: 9999; display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-weight: 600; font-size: 12px; border: 1px solid; letter-spacing: 0.06em; text-decoration: none; color: inherit; }
+        .version-badge:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .version-badge img { width: 28px; height: 28px; border-radius: 4px; }
+        .version-badge.temporal { border-color: var(--uv); color: var(--uv); }
 
-        .version-badge:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-        }
-
-        .version-badge img {
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
-        }
-
-        .version-badge.temporal {
-            border-color: var(--uv);
-            color: var(--uv);
-        }
-
-        .version-badge.pre-temporal {
-            border-color: var(--space-4);
-            color: var(--muted);
-        }
-
-        /* ─── Temporal wordmark in header ────────────────────────── */
-        .temporal-wordmark {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-family: var(--font-mono);
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0.12em;
-            color: var(--uv);
-            text-transform: uppercase;
-        }
-
-        .temporal-wordmark::before {
-            content: '';
-            display: inline-block;
-            width: 8px;
-            height: 8px;
-            background: var(--uv);
-            border-radius: 2px;
-            transform: rotate(45deg);
-        }
+        /* ─── Temporal wordmark ──────────────────────────────────── */
+        .temporal-wordmark { display: flex; align-items: center; gap: 8px; font-family: var(--font-mono); font-size: 10px; font-weight: 600; letter-spacing: 0.12em; color: var(--uv); text-transform: uppercase; }
+        .temporal-wordmark::before { content: ''; display: inline-block; width: 8px; height: 8px; background: var(--uv); border-radius: 2px; transform: rotate(45deg); }
     </style>
 </head>
 <body>
-    <div class="connection-status" id="connectionStatus" onclick="toggleAutoProcess()" onmouseenter="showStatusTooltip(event)" onmouseleave="hideStatusTooltip()">
-        Connecting...
-    </div>
+    <div class="connection-status" id="connectionStatus" onclick="toggleAutoProcess()" onmouseenter="showStatusTooltip(event)" onmouseleave="hideStatusTooltip()">Connecting...</div>
     <div class="status-tooltip" id="statusTooltip"></div>
 
     <!-- New Request Modal -->
@@ -1078,6 +636,10 @@
                     <option>Omeprazole 20mg</option>
                     <option>Amlodipine 5mg</option>
                     <option>Simvastatin 20mg</option>
+                    <option>Ozempic 0.5mg (semaglutide)</option>
+                    <option>Wegovy 2.4mg (semaglutide)</option>
+                    <option>Mounjaro 5mg (tirzepatide)</option>
+                    <option>Zepbound 5mg (tirzepatide)</option>
                 </select>
             </div>
             <div class="form-group">
@@ -1087,6 +649,17 @@
             <div class="form-group">
                 <label for="refills">Refills Remaining</label>
                 <input type="number" id="refills" min="0" max="12" value="3">
+            </div>
+            <!-- GLP-1 flag: triggers the v2 split-track adjudication path -->
+            <div class="form-group">
+                <label>GLP-1 Drug</label>
+                <label class="glp1-checkbox-row" for="isGlp1">
+                    <input type="checkbox" id="isGlp1">
+                    <div class="glp1-checkbox-label">
+                        This prescription contains a GLP-1 medication
+                        <span>Activates specialty adjudication track &amp; mandatory clinical prior auth (v2+ workers)</span>
+                    </div>
+                </label>
             </div>
             <!-- Claim Check demo: attach an image to trigger large-payload path -->
             <div class="form-group">
@@ -1101,7 +674,7 @@
                 <div class="file-size-warning" id="fileSizeWarning"></div>
             </div>
             <div class="modal-buttons">
-                <button class="btn btn-submit" onclick="submitNewRequest()">Submit & Process</button>
+                <button class="btn btn-submit" onclick="submitNewRequest()">Submit &amp; Process</button>
                 <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
             </div>
         </div>
@@ -1156,7 +729,6 @@
                 <span class="temporal-wordmark">Temporal</span>
             </div>
             <div class="panel-content">
-                <!-- Admin Actions -->
                 <div class="admin-section">
                     <div class="admin-buttons">
                         <button class="btn btn-admin" onclick="generateLoad()">Generate 20 Rxs</button>
@@ -1167,7 +739,6 @@
                 <!-- Feature Flags -->
                 <div class="feature-flags-section">
                     <div class="feature-flags-title">Feature Flags</div>
-
                     <div class="feature-flag-row">
                         <div class="feature-flag-info">
                             <span class="feature-flag-name">Payload Encryption</span>
@@ -1178,7 +749,6 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </div>
-
                     <div class="feature-flag-row">
                         <div class="feature-flag-info">
                             <span class="feature-flag-name">Claim Check</span>
@@ -1191,10 +761,8 @@
                     </div>
                 </div>
 
-                <!-- Endpoint Configurations -->
                 <div id="endpointConfigs"></div>
 
-                <!-- Logs -->
                 <div class="logs-section">
                     <div class="logs-header">
                         <h3>System Logs</h3>
@@ -1204,11 +772,11 @@
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="version-badge temporal" onclick="window.open('https://github.com/mmerrell/PBMAdjudicationService/tree/temporal', '_blank')">
-            <img src="https://avatars.githubusercontent.com/u/56493103?s=200&v=4" alt="Temporal">
-            <span>TEMPORAL</span>
-        </div>
+    <div class="version-badge temporal" onclick="window.open('https://github.com/mmerrell/PBMAdjudicationService/tree/temporal', '_blank')">
+        <img src="https://avatars.githubusercontent.com/u/56493103?s=200&v=4" alt="Temporal">
+        <span>TEMPORAL</span>
     </div>
 
     <script>
@@ -1219,24 +787,32 @@
 
         let prescriptions = {};
         let approvals = {};
+        let specialtyApprovals = {};
         let endpointConfigs = {};
         let autoProcessMode = false;
         let activeWorkflows = 0;
         let isConnecting = false;
-        let workflowRetrying = {};
 
         let pendingImageBase64 = null;
         const CLAIM_CHECK_THRESHOLD_KB = 128;
+
+        // GLP-1 drug name fragments for auto-detection in generate-load path
+        const GLP1_KEYWORDS = ['ozempic', 'wegovy', 'mounjaro', 'zepbound', 'semaglutide', 'tirzepatide', 'liraglutide', 'saxenda', 'victoza', 'rybelsus'];
+
+        function isGlp1Medication(name) {
+            const lower = name.toLowerCase();
+            return GLP1_KEYWORDS.some(k => lower.includes(k));
+        }
 
         async function startConnection() {
             if (isConnecting) return;
             isConnecting = true;
             try {
                 await connection.start();
-                console.log("SignalR Connected");
                 updateConnectionStatus();
                 await loadPrescriptions();
                 await loadApprovals();
+                await loadSpecialtyApprovals();
                 await loadConfigs();
                 await loadFeatureFlags();
             } catch (err) {
@@ -1265,7 +841,7 @@
             updateConnectionStatus();
             if (autoProcessMode) {
                 const toProcess = Object.values(prescriptions).filter(p => p.status === 'Pending');
-                for (const p of toProcess) await processWorkflow(p.id);
+                for (const p of toProcess) await processWorkflow(p.id, isGlp1Medication(p.medication));
             }
         }
 
@@ -1273,20 +849,13 @@
             const tooltip = document.getElementById('statusTooltip');
             const mode = autoProcessMode ? 'Auto-Process' : 'Manual';
             const workflowText = activeWorkflows > 0 ? `${activeWorkflows} active workflow(s)` : 'No active workflows';
-            tooltip.innerHTML = `
-                <strong>Mode:</strong> ${mode}<br>
-                <strong>Status:</strong> Connected<br>
-                <strong>Workflows:</strong> ${workflowText}<br>
-                <em style="color: var(--muted)">Click to toggle mode</em>
-            `;
+            tooltip.innerHTML = `<strong>Mode:</strong> ${mode}<br><strong>Status:</strong> Connected<br><strong>Workflows:</strong> ${workflowText}<br><em style="color: var(--muted)">Click to toggle mode</em>`;
             tooltip.style.top = (event.clientY + 10) + 'px';
             tooltip.style.left = (event.clientX - 100) + 'px';
             tooltip.classList.add('show');
         }
 
-        function hideStatusTooltip() {
-            document.getElementById('statusTooltip').classList.remove('show');
-        }
+        function hideStatusTooltip() { document.getElementById('statusTooltip').classList.remove('show'); }
 
         connection.on("ReceiveLog", (message) => {
             const logsContainer = document.getElementById('logsContainer');
@@ -1307,31 +876,28 @@
             renderApprovals();
         });
 
+        connection.on("SpecialtyApprovalRequestUpdated", (req) => {
+            specialtyApprovals[req.id] = req;
+            renderApprovals();
+        });
+
         // ── Feature flags ──────────────────────────────────────────────────────
 
         async function loadFeatureFlags() {
             const response = await fetch('/api/config/features');
             const data = await response.json();
-
             const encToggle = document.getElementById('encryptionToggle');
             const encDesc   = document.getElementById('encryptionDesc');
             encToggle.checked = data.enableEncryption;
-            encDesc.textContent = data.enableEncryption
-                ? 'ON — PII encrypted in Temporal history'
-                : 'OFF — PII visible in Temporal history';
+            encDesc.textContent = data.enableEncryption ? 'ON — PII encrypted in Temporal history' : 'OFF — PII visible in Temporal history';
             encDesc.style.color = data.enableEncryption ? 'var(--green)' : 'var(--muted)';
-
             document.getElementById('claimCheckToggle').checked = data.enableClaimCheck;
             updateClaimCheckDesc(data.enableClaimCheck);
         }
 
         async function toggleEncryption(enabled) {
             const current = await (await fetch('/api/config/features')).json();
-            await fetch('/api/config/features', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enableEncryption: enabled, enableClaimCheck: current.enableClaimCheck })
-            });
+            await fetch('/api/config/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enableEncryption: enabled, enableClaimCheck: current.enableClaimCheck }) });
             const desc = document.getElementById('encryptionDesc');
             desc.textContent = enabled ? 'ON — PII encrypted in Temporal history' : 'OFF — PII visible in Temporal history';
             desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
@@ -1339,19 +905,13 @@
 
         async function toggleClaimCheck(enabled) {
             const current = await (await fetch('/api/config/features')).json();
-            await fetch('/api/config/features', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ enableEncryption: current.enableEncryption, enableClaimCheck: enabled })
-            });
+            await fetch('/api/config/features', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enableEncryption: current.enableEncryption, enableClaimCheck: enabled }) });
             updateClaimCheckDesc(enabled);
         }
 
         function updateClaimCheckDesc(enabled) {
             const desc = document.getElementById('claimCheckDesc');
-            desc.textContent = enabled
-                ? `ON — images >${CLAIM_CHECK_THRESHOLD_KB} KB offloaded to storage`
-                : 'OFF — large payloads sent raw to Temporal';
+            desc.textContent = enabled ? `ON — images >${CLAIM_CHECK_THRESHOLD_KB} KB offloaded to storage` : 'OFF — large payloads sent raw to Temporal';
             desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
         }
 
@@ -1363,7 +923,6 @@
             const labelText  = document.getElementById('fileUploadText');
             const uploadArea = document.getElementById('fileUploadArea');
             const warning    = document.getElementById('fileSizeWarning');
-
             if (!file) {
                 pendingImageBase64 = null;
                 label.classList.remove('file-selected');
@@ -1372,12 +931,10 @@
                 warning.classList.remove('show');
                 return;
             }
-
             const sizeKb = Math.round(file.size / 1024);
             labelText.textContent = `${file.name} (${sizeKb} KB)`;
             label.classList.add('file-selected');
             uploadArea.classList.add('has-file');
-
             if (sizeKb > CLAIM_CHECK_THRESHOLD_KB) {
                 warning.textContent = `⚠ ${sizeKb} KB exceeds ${CLAIM_CHECK_THRESHOLD_KB} KB threshold — Claim Check will offload this if enabled`;
                 warning.className = 'file-size-warning show over-threshold';
@@ -1385,7 +942,6 @@
                 warning.textContent = `${sizeKb} KB — under ${CLAIM_CHECK_THRESHOLD_KB} KB threshold, will pass through inline`;
                 warning.className = 'file-size-warning show under-threshold';
             }
-
             const reader = new FileReader();
             reader.onload = (e) => { pendingImageBase64 = e.target.result.split(',')[1]; };
             reader.readAsDataURL(file);
@@ -1409,6 +965,14 @@
             renderApprovals();
         }
 
+        async function loadSpecialtyApprovals() {
+            const response = await fetch('/api/specialty-approvals');
+            const data = await response.json();
+            specialtyApprovals = {};
+            data.forEach(a => specialtyApprovals[a.id] = a);
+            renderApprovals();
+        }
+
         async function loadConfigs() {
             const response = await fetch('/api/config');
             endpointConfigs = await response.json();
@@ -1420,8 +984,7 @@
         function renderPrescriptions() {
             const container = document.getElementById('patientPortal');
             const prescriptionList = Object.values(prescriptions).sort((a, b) =>
-                new Date(b.requestedDate) - new Date(a.requestedDate)
-            );
+                new Date(b.requestedDate) - new Date(a.requestedDate));
 
             if (prescriptionList.length === 0) {
                 container.innerHTML = '<div class="empty-state">No prescriptions to display</div>';
@@ -1430,29 +993,44 @@
 
             function generateTimeline(p) {
                 const steps = [
-                    { key: 'validate',   name: 'Validate' },
-                    { key: 'authorize',  name: 'Authorize' },
+                    { key: 'validate',   name: 'Validate'   },
+                    { key: 'authorize',  name: 'Authorize'  },
                     { key: 'adjudicate', name: 'Adjudicate' },
-                    { key: 'approval',   name: 'Approval' },
-                    { key: 'submit',     name: 'Submit' }
+                    { key: 'approval',   name: 'Approval'   },
+                    { key: 'submit',     name: 'Submit'     }
                 ];
+
+                const glp1Statuses = ['AdjudicatingGlp1', 'SpecialtyAuthPending', 'SpecialtyAuthApproved', 'SpecialtyAuthTimeout', 'SubmittingSpecialty'];
+                // isGlp1Flow: true whenever we're in a GLP-1 specific status, OR
+                // it's a GLP-1 medication that completed/was denied without going
+                // through the standard doctor approval path (no approvalNeededReason).
+                const isGlp1Flow = glp1Statuses.includes(p.status)
+                    || (isGlp1Medication(p.medication)
+                        && (p.status === 'Completed' || p.status === 'Denied')
+                        && !p.approvalNeededReason);
 
                 let currentStepIndex = -1, failedStep = -1;
                 let isWaiting = p.status === 'Waiting', approvalSkipped = false;
 
-                if      (p.status === 'Pending')                                     { currentStepIndex = -1; }
-                else if (p.status === 'Waiting')                                     { currentStepIndex = 0; }
-                else if (p.status === 'Validating'   || p.status === 'Validated')   { currentStepIndex = 0; }
-                else if (p.status === 'Authorizing'  || p.status === 'Authorized')  { currentStepIndex = 1; }
-                else if (p.status === 'Adjudicating' || p.status === 'Adjudicated') { currentStepIndex = 2; }
+                if      (p.status === 'Pending')                                             { currentStepIndex = -1; }
+                else if (p.status === 'Waiting')                                             { currentStepIndex = 0; }
+                else if (p.status === 'Validating'   || p.status === 'Validated')           { currentStepIndex = 0; }
+                else if (p.status === 'Authorizing'  || p.status === 'Authorized')          { currentStepIndex = 1; }
+                else if (p.status === 'Adjudicating' || p.status === 'Adjudicated' ||
+                         p.status === 'AdjudicatingGlp1')                                   { currentStepIndex = 2; }
+                else if (p.status === 'SpecialtyAuthPending')                               { currentStepIndex = 3; }
+                else if (p.status === 'SpecialtyAuthApproved')                              { currentStepIndex = 3; }
+                else if (p.status === 'SpecialtyAuthTimeout')                               { currentStepIndex = 3; failedStep = 3; }
                 else if (p.status === 'ApprovalNeeded' || p.status === 'Approved' ||
-                         p.status === 'Denied' || p.status === 'ApprovalTimeout')   {
+                         p.status === 'Denied' || p.status === 'ApprovalTimeout')           {
                     currentStepIndex = 3;
                     if (p.status === 'Denied' || p.status === 'ApprovalTimeout') failedStep = 3;
                 }
-                else if (p.status === 'Submitting' || p.status === 'Completed') {
+                else if (p.status === 'Submitting' || p.status === 'SubmittingSpecialty' || p.status === 'Completed') {
                     currentStepIndex = 4;
-                    if (!p.approvalNeededReason) approvalSkipped = true;
+                    // For GLP-1 v2 path there's no doctor approval step — mark it skipped.
+                    // For standard path, skip approval only if it wasn't needed (no approvalNeededReason).
+                    if (isGlp1Flow || (!p.approvalNeededReason && !isGlp1Flow)) approvalSkipped = true;
                 }
                 else if (p.status === 'OnHold') {
                     currentStepIndex = p.failedStep ?? -1;
@@ -1466,19 +1044,31 @@
 
                     if (index === failedStep) {
                         pipClass += ' failed'; icon = '✗';
-                        if (p.status === 'ApprovalTimeout') { label = `<div class="timeline-label">Timeout</div>`; tooltip = `${step.name} - Approval timeout`; }
-                        else                                { label = `<div class="timeline-label">Denied</div>`;  tooltip = `${step.name} - Denied by doctor`; }
+                        if (p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') {
+                            label   = `<div class="timeline-label">Timeout</div>`;
+                            tooltip = `${step.name} - Timed out`;
+                        } else {
+                            label   = `<div class="timeline-label">Denied</div>`;
+                            tooltip = `${step.name} - Denied`;
+                        }
                     } else if (approvalSkipped && index === 3) {
                         pipClass += ' skipped'; icon = '⊘'; tooltip = `${step.name} - Not required`;
                     } else if (index < currentStepIndex ||
-                               (index === currentStepIndex && !(approvalSkipped && index === 3) &&
-                                p.status.endsWith('ed') && p.status !== 'ApprovalNeeded' && failedStep !== index)) {
+                               (index === currentStepIndex &&
+                                (p.status === 'Adjudicated' || p.status === 'Authorized' ||
+                                 p.status === 'Validated' || p.status === 'Approved' ||
+                                 p.status === 'SpecialtyAuthApproved' || p.status === 'Completed') &&
+                                !(approvalSkipped && index === 3) && failedStep !== index)) {
                         pipClass += ' completed'; icon = '✓'; tooltip = `${step.name} - Completed`;
                     } else if (index === currentStepIndex) {
                         if (isWaiting && index === 0) {
                             pipClass += ' waiting'; icon = '⏰';
                             label = `<div class="timeline-label">Not Eligible Yet</div>`;
-                            tooltip = `${step.name} - Waiting ${Math.round((new Date(p.eligibleDate) - new Date()) / 60000)} min`;
+                            tooltip = `${step.name} - Waiting`;
+                        } else if (p.status === 'SpecialtyAuthPending' && index === 3) {
+                            pipClass += ' specialty'; icon = '🔬';
+                            label = `<div class="timeline-label teal">Specialty Auth</div>`;
+                            tooltip = `${step.name} - Awaiting clinical reviewer`;
                         } else if (p.status === 'ApprovalNeeded' && index === 3) {
                             pipClass += ' waiting'; icon = '⏰';
                             label = `<div class="timeline-label">Awaiting Doctor</div>`;
@@ -1499,6 +1089,9 @@
             }
 
             container.innerHTML = prescriptionList.map(p => {
+                const isGlp1Card = ['AdjudicatingGlp1','SpecialtyAuthPending','SpecialtyAuthApproved','SpecialtyAuthTimeout'].includes(p.status)
+                    || isGlp1Medication(p.medication);
+
                 const eligibleDate = new Date(p.eligibleDate);
                 const eligibleText = new Date() >= eligibleDate
                     ? `<span style="color: var(--green);">✓ Eligible</span>`
@@ -1509,11 +1102,26 @@
                 else if (p.notificationStatus === 'Failed')   notifBadge = `<div class="notif-badge failed">✗ Notification failed permanently</div>`;
                 else if (p.notificationStatus === 'Sent')     notifBadge = `<div class="notif-badge sent">✓ Patient notified</div>`;
 
+                const cardClass = p.status === 'Completed' ? 'status-completed'
+                    : (p.status === 'Denied' || p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') ? 'status-denied'
+                    : p.status === 'OnHold' ? 'status-failed'
+                    : isGlp1Card ? 'status-glp1'
+                    : '';
+
+                const glp1Badge = isGlp1Card ? `<span class="glp1-badge">GLP-1</span>` : '';
+
+                const workflowId = `prescription-${p.patientId}-${p.id}`;
+                const workflowUrl = `http://localhost:8233/namespaces/default/workflows/${workflowId}`;
+                const workflowLink = p.status !== 'Pending'
+                    ? `<a class="workflow-link" href="${workflowUrl}" target="_blank">⬡ ${workflowId}</a>`
+                    : '';
+
                 return `
-                    <div class="prescription-card ${p.status === 'Completed' ? 'status-completed' : p.status === 'Denied' || p.status === 'ApprovalTimeout' ? 'status-denied' : p.status === 'OnHold' ? 'status-failed' : ''}">
-                        ${p.copay ? `<div class="copay-badge">$${p.copay.toFixed(2)}</div>` : ''}
+                    <div class="prescription-card ${cardClass}">
+                        ${p.copay ? `<div class="copay-badge">${p.copay.toFixed(2)}</div>` : ''}
                         <h3>${p.patientName}</h3>
-                        <div class="medication">${p.medication}</div>
+                        <div class="medication">${p.medication}${glp1Badge}</div>
+                        ${workflowLink}
                         <div class="info-row">
                             <div class="detail">ID: ${p.patientId}</div>
                             <div class="detail-right">${eligibleText}</div>
@@ -1523,7 +1131,7 @@
                             <div class="detail-right">${new Date(p.requestedDate).toLocaleDateString()} ${new Date(p.requestedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
                         ${generateTimeline(p)}
-                        ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}')">▶ Process Workflow</button>` : ''}
+                        ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}', ${isGlp1Medication(p.medication)})">▶ Process Workflow</button>` : ''}
                         ${notifBadge}
                     </div>`;
             }).join('');
@@ -1533,26 +1141,59 @@
 
         function renderApprovals() {
             const container = document.getElementById('doctorPortal');
-            const approvalList = Object.values(approvals)
+
+            const doctorList = Object.values(approvals)
                 .filter(a => !a.isApproved && !a.isDenied)
                 .sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
 
-            if (approvalList.length === 0) {
+            const specialtyList = Object.values(specialtyApprovals)
+                .filter(a => !a.isApproved && !a.isDenied && !a.isTimedOut)
+                .sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+
+            if (doctorList.length === 0 && specialtyList.length === 0) {
                 container.innerHTML = '<div class="empty-state">No approval requests</div>';
                 return;
             }
 
-            container.innerHTML = approvalList.map(a => `
-                <div class="approval-card">
-                    <h3>${a.patientName}</h3>
-                    <div class="medication">${a.medication}</div>
-                    <div class="timestamp">Requested: ${new Date(a.requestedAt).toLocaleString()}</div>
-                    ${a.reminderCount > 0 ? `<div class="timestamp">Reminders sent: ${a.reminderCount}</div>` : ''}
-                    <div class="approval-buttons">
-                        <button class="btn btn-approve" onclick="handleApproval('${a.id}', true)">✓ Approve</button>
-                        <button class="btn btn-deny" onclick="handleApproval('${a.id}', false)">✗ Deny</button>
-                    </div>
-                </div>`).join('');
+            let html = '';
+
+            // Specialty prior auth cards — teal, shown first (higher regulatory urgency)
+            if (specialtyList.length > 0) {
+                html += `<div class="portal-section-label">🔬 GLP-1 Specialty Prior Auth</div>`;
+                html += specialtyList.map(a => `
+                    <div class="specialty-card">
+                        <h3>${a.patientName}</h3>
+                        <div class="medication">${a.medication}</div>
+                        <div class="specialty-label">CMS Specialty Auth Required</div>
+                        <div class="regulatory-note">
+                            CMS mandate: all GLP-1 claims require clinical prior authorization.<br>
+                            This review is separate from the standard pharmacy track.
+                        </div>
+                        <div class="timestamp">Requested: ${new Date(a.requestedAt).toLocaleString()}</div>
+                        <div class="approval-buttons">
+                            <button class="btn btn-approve" onclick="handleSpecialtyApproval('${a.id}', true)">✓ Authorize</button>
+                            <button class="btn btn-deny"    onclick="handleSpecialtyApproval('${a.id}', false)">✗ Deny</button>
+                        </div>
+                    </div>`).join('');
+            }
+
+            // Standard doctor approval cards — amber
+            if (doctorList.length > 0) {
+                html += `<div class="portal-section-label">📋 Doctor Approval</div>`;
+                html += doctorList.map(a => `
+                    <div class="approval-card">
+                        <h3>${a.patientName}</h3>
+                        <div class="medication">${a.medication}</div>
+                        <div class="timestamp">Requested: ${new Date(a.requestedAt).toLocaleString()}</div>
+                        ${a.reminderCount > 0 ? `<div class="timestamp">Reminders sent: ${a.reminderCount}</div>` : ''}
+                        <div class="approval-buttons">
+                            <button class="btn btn-approve" onclick="handleApproval('${a.id}', true)">✓ Approve</button>
+                            <button class="btn btn-deny"    onclick="handleApproval('${a.id}', false)">✗ Deny</button>
+                        </div>
+                    </div>`).join('');
+            }
+
+            container.innerHTML = html;
         }
 
         // ── Render endpoint configs ────────────────────────────────────────────
@@ -1560,11 +1201,13 @@
         function renderConfigs() {
             const container = document.getElementById('endpointConfigs');
             const endpoints = [
-                { key: 'validate',   name: 'Validate Eligibility' },
-                { key: 'authorize',  name: 'Prior Authorization' },
-                { key: 'adjudicate', name: 'Adjudicate Claim' },
-                { key: 'notify',     name: 'Notifications' },
-                { key: 'submit',     name: 'Submit to Pharmacy' }
+                { key: 'validate',        name: 'Validate Eligibility'      },
+                { key: 'authorize',       name: 'Prior Authorization'        },
+                { key: 'adjudicate',      name: 'Adjudicate Claim'           },
+                { key: 'adjudicate-glp1', name: 'Adjudicate GLP-1 (Specialty)' },
+                { key: 'notify',          name: 'Notifications'              },
+                { key: 'submit',          name: 'Submit to Pharmacy'         },
+                { key: 'submit-specialty',name: 'Submit to Specialty Pharmacy' }
             ];
 
             container.innerHTML = endpoints.map(ep => {
@@ -1605,15 +1248,15 @@
             else config[property] = parseInt(value);
             if (property === 'failureRatePercent') document.getElementById(`${endpoint}-failure`).textContent = `${value}%`;
             else if (property === 'latencyMs')     document.getElementById(`${endpoint}-latency`).textContent = `${value}ms`;
-            await fetch(`/api/config/${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(config)
-            });
+            await fetch(`/api/config/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(config) });
         }
 
         async function handleApproval(approvalId, approved) {
             await fetch(`/api/approve/${approvalId}?approved=${approved}`, { method: 'POST' });
+        }
+
+        async function handleSpecialtyApproval(specialtyAuthId, approved) {
+            await fetch(`/api/specialty-approve/${specialtyAuthId}?approved=${approved}`, { method: 'POST' });
         }
 
         function clearLogs() { document.getElementById('logsContainer').innerHTML = ''; }
@@ -1624,7 +1267,7 @@
                 setTimeout(async () => {
                     const pending = Object.values(prescriptions).filter(p => p.status === 'Pending');
                     for (const p of pending) {
-                        await processWorkflow(p.id);
+                        await processWorkflow(p.id, isGlp1Medication(p.medication));
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 }, 1000);
@@ -1645,20 +1288,18 @@
                 updateConnectionStatus();
                 prescriptions = {};
                 approvals = {};
+                specialtyApprovals = {};
                 Object.keys(endpointConfigs).forEach(key => {
                     endpointConfigs[key] = { failureRatePercent: 0, latencyMs: 0, completeOutage: false };
                 });
                 for (const endpoint of Object.keys(endpointConfigs)) {
-                    await fetch(`/api/config/${endpoint}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(endpointConfigs[endpoint])
-                    });
+                    await fetch(`/api/config/${endpoint}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(endpointConfigs[endpoint]) });
                 }
                 await fetch('/api/admin/reset', { method: 'POST' });
                 clearLogs();
                 await loadPrescriptions();
                 await loadApprovals();
+                await loadSpecialtyApprovals();
                 renderConfigs();
             });
         }
@@ -1679,6 +1320,10 @@
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             document.getElementById('eligibleDate').value = now.toISOString().slice(0, 16);
 
+            // Auto-check GLP-1 if the selected medication is a GLP-1
+            const selectedMed = document.getElementById('medication').value;
+            document.getElementById('isGlp1').checked = isGlp1Medication(selectedMed);
+
             pendingImageBase64 = null;
             document.getElementById('imageAttachment').value = '';
             document.getElementById('fileUploadLabel').classList.remove('file-selected');
@@ -1687,53 +1332,55 @@
             document.getElementById('fileSizeWarning').classList.remove('show');
 
             document.getElementById('newRequestModal').classList.add('show');
+
+            // Keep GLP-1 checkbox in sync if user changes medication selection
+            document.getElementById('medication').onchange = function() {
+                document.getElementById('isGlp1').checked = isGlp1Medication(this.value);
+            };
         }
 
-        function closeModal() { document.getElementById('newRequestModal').classList.remove('show'); }
+        function closeModal() {
+            document.getElementById('newRequestModal').classList.remove('show');
+            document.getElementById('medication').onchange = null;
+        }
 
         async function submitNewRequest() {
             const patientName  = document.getElementById('patientName').value;
             const medication   = document.getElementById('medication').value;
             const eligibleDate = document.getElementById('eligibleDate').value;
             const refills      = parseInt(document.getElementById('refills').value);
+            const isGlp1       = document.getElementById('isGlp1').checked;
 
             if (!patientName) { alert('Please enter a patient name'); return; }
 
             const prescription = {
                 id:               'P' + Date.now(),
                 patientId:        'PAT' + Math.random().toString(36).substr(2, 9),
-                patientName,
-                medication,
+                patientName, medication,
                 eligibleDate:     new Date(eligibleDate).toISOString(),
                 refillsRemaining: refills,
                 status:           'Pending',
                 requestedDate:    new Date().toISOString()
             };
 
-            await fetch('/api/prescriptions', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(prescription)
-            });
-
+            await fetch('/api/prescriptions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prescription) });
             prescriptions[prescription.id] = prescription;
             renderPrescriptions();
             closeModal();
 
-            // Always start the workflow on submit — image path if attached, standard path otherwise
             if (pendingImageBase64) {
-                await processWorkflowWithImage(prescription.id, pendingImageBase64);
+                await processWorkflowWithImage(prescription.id, pendingImageBase64, isGlp1);
                 pendingImageBase64 = null;
             } else {
-                await processWorkflow(prescription.id);
+                await processWorkflow(prescription.id, isGlp1);
             }
         }
 
-        async function processWorkflow(prescriptionId) {
+        async function processWorkflow(prescriptionId, isGlp1 = false) {
             activeWorkflows++;
             updateConnectionStatus();
             try {
-                const response = await fetch(`/api/workflow/start/${prescriptionId}`, { method: 'POST' });
+                const response = await fetch(`/api/workflow/start/${prescriptionId}?isGlp1=${isGlp1}`, { method: 'POST' });
                 if (!response.ok) throw new Error('Failed to start workflow');
                 const result = await response.json();
                 console.log('Temporal workflow started:', result.workflowId);
@@ -1746,11 +1393,11 @@
             }
         }
 
-        async function processWorkflowWithImage(prescriptionId, imageBase64) {
+        async function processWorkflowWithImage(prescriptionId, imageBase64, isGlp1 = false) {
             activeWorkflows++;
             updateConnectionStatus();
             try {
-                const response = await fetch(`/api/workflow/start-with-image/${prescriptionId}`, {
+                const response = await fetch(`/api/workflow/start-with-image/${prescriptionId}?isGlp1=${isGlp1}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageData: imageBase64 })

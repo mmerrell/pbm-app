@@ -178,5 +178,68 @@ namespace PBMAdjudication.Worker
             var client = _httpClientFactory.CreateClient();
             await client.PostAsync($"{_baseUrl}/api/notify-failed/{prescriptionId}", null);
         }
+
+        // ── GLP-1 specialty activities (v2+) ─────────────────────────────────
+
+        [Activity]
+        public async Task<AdjudicationResult> AdjudicateGlp1ClaimAsync(string prescriptionId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_baseUrl}/api/adjudicate-glp1/{prescriptionId}", null);
+
+            if (!response.IsSuccessStatusCode)
+                throw new ApplicationException($"GLP-1 adjudication failed: {response.StatusCode}");
+
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            return new AdjudicationResult
+            {
+                Copay = root.TryGetProperty("copay", out var copayProp) ? copayProp.GetDecimal() : 0
+            };
+        }
+
+        [Activity]
+        public async Task RequestSpecialtyPriorAuthAsync(string prescriptionId, string patientName, string medication)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync(
+                $"{_baseUrl}/api/request-specialty-auth/{prescriptionId}" +
+                $"?patientName={Uri.EscapeDataString(patientName)}&medication={Uri.EscapeDataString(medication)}",
+                null);
+
+            if (!response.IsSuccessStatusCode)
+                throw new ApplicationException($"Specialty auth request failed: {response.StatusCode}");
+        }
+
+        [Activity]
+        public async Task HandleSpecialtyAuthTimeoutAsync(string prescriptionId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_baseUrl}/api/specialty-auth-timeout/{prescriptionId}", null);
+
+            if (!response.IsSuccessStatusCode)
+                throw new ApplicationException($"Specialty auth timeout handling failed: {response.StatusCode}");
+        }
+
+        [Activity]
+        public async Task<SubmissionResult> SubmitToSpecialtyPharmacyAsync(string prescriptionId)
+        {
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsync($"{_baseUrl}/api/submit-specialty/{prescriptionId}", null);
+
+            if (!response.IsSuccessStatusCode)
+                throw new ApplicationException($"Specialty pharmacy submission failed: {response.StatusCode}");
+
+            var json = await response.Content.ReadAsStringAsync();
+            var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            return new SubmissionResult
+            {
+                Submitted = root.TryGetProperty("submitted", out var submittedProp) && submittedProp.GetBoolean()
+            };
+        }
     }
 }

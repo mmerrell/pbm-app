@@ -7,8 +7,7 @@ namespace PBMAdjudication.Core
         public string Medication { get; set; } = "";
         public DateTime EligibleDate { get; set; }
         public int RefillsRemaining { get; set; }
-
-
+        public bool IsGlp1 { get; set; } = false;
     }
 
     public class ValidationResult
@@ -31,6 +30,14 @@ namespace PBMAdjudication.Core
     {
         public bool ApprovalNeeded { get; set; }
         public string? ApprovalId { get; set; }
+    }
+
+    // Result returned by each child workflow in the GLP-1 split path (v2+)
+    public class AdjudicationChildResult
+    {
+        public bool Success { get; set; }
+        public decimal Copay { get; set; }
+        public string Track { get; set; } = ""; // "standard" or "glp1"
     }
 
     public class SubmissionResult

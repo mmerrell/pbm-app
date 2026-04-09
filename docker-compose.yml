@@ -18,10 +18,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    profiles:
+      - default
+      - versioning
 
   # ── Temporal Server ───────────────────────────────────────────────────────
   temporal:
-    image: temporalio/auto-setup:latest
+    image: temporalio/auto-setup:1.29.4
     networks:
       - pbm-net
     environment:
@@ -30,15 +33,27 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PWD=postgres
       - POSTGRES_SEEDS=postgres
+      - DYNAMIC_CONFIG_FILE_PATH=/etc/temporal/dynamic-config.yaml
     ports:
       - "7233:7233"
+    volumes:
+      - ./temporal-dynamic-config.yaml:/etc/temporal/dynamic-config.yaml
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "temporal:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    profiles:
+      - default
+      - versioning
 
   # ── Temporal UI ───────────────────────────────────────────────────────────
   temporal-ui:
-    image: temporalio/ui:latest
+    image: temporalio/ui:2.48.1
     networks:
       - pbm-net
     environment:
@@ -48,11 +63,14 @@ services:
       - "8233:8080"
     depends_on:
       - temporal
+    profiles:
+      - default
+      - versioning
 
   # ── PBM Api ───────────────────────────────────────────────────────────────
   api:
     build:
-      context: .
+      context: .  
       dockerfile: Dockerfile.api
     networks:
       - pbm-net
@@ -72,9 +90,12 @@ services:
       postgres:
         condition: service_healthy
       temporal:
-        condition: service_started
+        condition: service_healthy
+    profiles:
+      - default
+      - versioning
 
-  # ── PBM Worker ────────────────────────────────────────────────────────────
+  # ── PBM Worker (unversioned — default, codec demo) ──────────────────────
   worker:
     build:
       context: .
@@ -88,15 +109,119 @@ services:
       - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://api:5002
+      - USE_VERSIONING=false
     volumes:
       - claim-check-data:/tmp/claim-check
     depends_on:
       postgres:
         condition: service_healthy
       temporal:
-        condition: service_started
+        condition: service_healthy
       api:
         condition: service_started
+    profiles:
+      - default
+
+  # ── PBM Worker v1 (versioned — original single-track adjudication) ────────
+  # Start the versioning demo with: docker compose --profile versioning up
+  # After v1 is running, promote it as current version:
+  #   temporal worker deployment set-current-version \
+  #     --deployment-name pbm-adjudication --build-id 1.0
+  worker-v1:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    networks:
+      - pbm-net
+    environment:
+      - Temporal__Host=temporal:7233
+      - Temporal__EnableEncryption=false
+      - Temporal__EnableClaimCheck=false
+      - Temporal__ClaimCheckStorePath=/tmp/claim-check
+      - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
+      - BaseUrl=http://api:5002
+      - USE_VERSIONING=true
+      - BUILD_ID=1.0
+      - DEPLOYMENT_NAME=pbm-adjudication
+    volumes:
+      - claim-check-data:/tmp/claim-check
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      api:
+        condition: service_started
+    profiles:
+      - versioning
+
+  # ── PBM Worker v2 (versioned — GLP-1 split with child workflows) ──────────
+  # Once a GLP-1 claim is in-flight on v1 (awaiting specialty auth), promote v2:
+  #   temporal worker deployment set-current-version \
+  #     --deployment-name pbm-adjudication --build-id 2.0
+  # New claims route to v2. The in-flight v1 claim stays pinned and completes safely.
+  worker-v2:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    networks:
+      - pbm-net
+    environment:
+      - Temporal__Host=temporal:7233
+      - Temporal__EnableEncryption=false
+      - Temporal__EnableClaimCheck=false
+      - Temporal__ClaimCheckStorePath=/tmp/claim-check
+      - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
+      - BaseUrl=http://api:5002
+      - USE_VERSIONING=true
+      - BUILD_ID=2.0
+      - DEPLOYMENT_NAME=pbm-adjudication
+    volumes:
+      - claim-check-data:/tmp/claim-check
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+      api:
+        condition: service_started
+    profiles:
+      - versioning
+
+  # ── Versioning Init (promotes v1 as current once workers register) ─────────
+  # Runs once at startup in versioning mode. Retries until both workers
+  # have polled and the deployment is visible, then promotes v1 as current.
+  versioning-init:
+    image: temporalio/admin-tools:1.29.4
+    networks:
+      - pbm-net
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        echo "[versioning-init] Waiting for workers to register deployment..."
+        until temporal worker deployment describe \
+          --name pbm-adjudication \
+          --address temporal:7233 2>/dev/null | grep -q '1.0'; do
+          echo "[versioning-init] Not ready yet, retrying in 5s..."
+          sleep 5
+        done
+        echo "[versioning-init] Workers registered. Promoting v1 as current version..."
+        temporal worker deployment set-current-version \
+          --deployment-name pbm-adjudication \
+          --build-id 1.0 \
+          --yes \
+          --address temporal:7233
+        echo "[versioning-init] Done. pbm-adjudication/1.0 is now current."
+    depends_on:
+      temporal:
+        condition: service_healthy
+      worker-v1:
+        condition: service_started
+      worker-v2:
+        condition: service_started
+    restart: "no"
+    profiles:
+      - versioning
 
 networks:
   pbm-net:

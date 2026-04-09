@@ -4,6 +4,8 @@ using PBMAdjudication.Core.Codec;
 using Temporalio.Client;
 using Temporalio.Converters;
 using Temporalio.Extensions.Hosting;
+using Temporalio.Common;
+using Temporalio.Worker;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
@@ -14,15 +16,9 @@ builder.Configuration.AddEnvironmentVariables();
 builder.Services.AddHttpClient();
 
 // ── Codec / DataConverter setup ──────────────────────────────────────────────
-// Must exactly mirror the Api's codec pipeline so the Worker can read history
-// written by the Api and vice versa.
-//
-// Encode order:  ClaimCheck → Encryption
-// Decode order:  Encryption → ClaimCheck  (CompositePayloadCodec reverses automatically)
-
-var enableEncryption  = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
-var enableClaimCheck  = builder.Configuration.GetValue<bool>("Temporal:EnableClaimCheck");
-var keyBase64         = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
+var enableEncryption    = builder.Configuration.GetValue<bool>("Temporal:EnableEncryption");
+var enableClaimCheck    = builder.Configuration.GetValue<bool>("Temporal:EnableClaimCheck");
+var keyBase64           = CodecKeyHelper.GetKeyFromConfig(builder.Configuration);
 var claimCheckStorePath = builder.Configuration["Temporal:ClaimCheckStorePath"] ?? "/tmp/claim-check";
 
 var dynamicEncryptionCodec = new DynamicEncryptionCodec(keyBase64, enableEncryption);
@@ -36,8 +32,18 @@ Console.WriteLine(enableEncryption
     ? "[Codec] Payload encryption ENABLED"
     : "[Codec] Payload encryption DISABLED");
 Console.WriteLine(enableClaimCheck
-    ? $"[Codec] Claim Check ENABLED — threshold {dynamicClaimCheckCodec.ThresholdBytes / 1024} KB, store: {claimCheckStorePath}"
-    : "[Codec] Claim Check DISABLED — large payloads will hit Temporal size limits");
+    ? $"[Codec] Claim Check ENABLED — store: {claimCheckStorePath}"
+    : "[Codec] Claim Check DISABLED");
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Worker Versioning setup ───────────────────────────────────────────────────
+var buildId        = builder.Configuration["BUILD_ID"] ?? "1.0";
+var deploymentName = builder.Configuration["DEPLOYMENT_NAME"] ?? "pbm-adjudication";
+var useVersioning  = builder.Configuration.GetValue<bool>("USE_VERSIONING");
+
+Console.WriteLine(useVersioning
+    ? $"[Versioning] ENABLED — deployment: {deploymentName}, build: {buildId}"
+    : "[Versioning] DISABLED — running unversioned worker");
 // ─────────────────────────────────────────────────────────────────────────────
 
 var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";
@@ -51,16 +57,32 @@ builder.Services.AddSingleton<ITemporalClient>(sp =>
 
 builder.Services.AddHostedService(sp =>
 {
-    var client = sp.GetRequiredService<ITemporalClient>();
+    var client            = sp.GetRequiredService<ITemporalClient>();
     var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
-    var configuration = sp.GetRequiredService<IConfiguration>();
-    var activities = new PrescriptionActivities(httpClientFactory, configuration);
-    return new TemporalWorkerService(
-        client,
-        new TemporalWorkerServiceOptions("prescription-task-queue")
-            .AddWorkflow<PrescriptionWorkflow>()
-            .AddAllActivities(activities)
-    );
+    var configuration     = sp.GetRequiredService<IConfiguration>();
+    var activities        = new PrescriptionActivities(httpClientFactory, configuration);
+
+    var workerOptions = new TemporalWorkerOptions("prescription-task-queue");
+
+    if (useVersioning)
+    {
+        workerOptions.DeploymentOptions = new WorkerDeploymentOptions(
+            new WorkerDeploymentVersion(deploymentName, buildId),
+            useWorkerVersioning: true)
+        {
+            // Pinned: each execution stays on the version it started on.
+            // This is the key property that lets v1 GLP-1 claims (still awaiting
+            // specialty auth) continue running safely while v2 handles new claims.
+            DefaultVersioningBehavior = VersioningBehavior.Pinned
+        };
+    }
+
+    workerOptions.AddWorkflow<PrescriptionWorkflow>();
+    workerOptions.AddWorkflow<StandardAdjudicationWorkflow>();
+    workerOptions.AddWorkflow<Glp1AdjudicationWorkflow>();
+    workerOptions.AddAllActivities(activities);
+
+    return new TemporalWorkerService(client, workerOptions);
 });
 
 await builder.Build().RunAsync();
