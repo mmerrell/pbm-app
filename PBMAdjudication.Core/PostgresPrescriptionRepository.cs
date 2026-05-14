@@ -28,7 +28,8 @@ namespace PBMAdjudication.Core
                     refills_remaining AS RefillsRemaining, status AS Status,
                     copay AS Copay, requested_date AS RequestedDate,
                     failed_step AS FailedStep, notification_status AS NotificationStatus,
-                    approval_needed_reason AS ApprovalNeededReason
+                    approval_needed_reason AS ApprovalNeededReason,
+                    activity_retry_status AS ActivityRetryStatus, activity_retry_step AS ActivityRetryStep
                 FROM prescriptions
                 ORDER BY requested_date DESC");
         }
@@ -43,7 +44,8 @@ namespace PBMAdjudication.Core
                     refills_remaining AS RefillsRemaining, status AS Status,
                     copay AS Copay, requested_date AS RequestedDate,
                     failed_step AS FailedStep, notification_status AS NotificationStatus,
-                    approval_needed_reason AS ApprovalNeededReason
+                    approval_needed_reason AS ApprovalNeededReason,
+                    activity_retry_status AS ActivityRetryStatus, activity_retry_step AS ActivityRetryStep
                 FROM prescriptions
                 WHERE id = @id",
                 new { id });
@@ -59,7 +61,8 @@ namespace PBMAdjudication.Core
                     refills_remaining AS RefillsRemaining, status AS Status,
                     copay AS Copay, requested_date AS RequestedDate,
                     failed_step AS FailedStep, notification_status AS NotificationStatus,
-                    approval_needed_reason AS ApprovalNeededReason
+                    approval_needed_reason AS ApprovalNeededReason,
+                    activity_retry_status AS ActivityRetryStatus, activity_retry_step AS ActivityRetryStep
                 FROM prescriptions
                 WHERE status = 'Pending'
                 ORDER BY requested_date DESC");
@@ -72,11 +75,13 @@ namespace PBMAdjudication.Core
                 INSERT INTO prescriptions 
                     (id, patient_id, patient_name, medication, eligible_date,
                      refills_remaining, status, copay, requested_date,
-                     failed_step, notification_status, approval_needed_reason)
+                     failed_step, notification_status, approval_needed_reason,
+                     activity_retry_status, activity_retry_step)
                 VALUES 
                     (@Id, @PatientId, @PatientName, @Medication, @EligibleDate,
                      @RefillsRemaining, @Status, @Copay, @RequestedDate,
-                     @FailedStep, @NotificationStatus, @ApprovalNeededReason)
+                     @FailedStep, @NotificationStatus, @ApprovalNeededReason,
+                     @ActivityRetryStatus, @ActivityRetryStep)
                 ON CONFLICT (id) DO UPDATE SET
                     patient_id = EXCLUDED.patient_id,
                     patient_name = EXCLUDED.patient_name,
@@ -88,7 +93,9 @@ namespace PBMAdjudication.Core
                     requested_date = EXCLUDED.requested_date,
                     failed_step = EXCLUDED.failed_step,
                     notification_status = EXCLUDED.notification_status,
-                    approval_needed_reason = EXCLUDED.approval_needed_reason",
+                    approval_needed_reason = EXCLUDED.approval_needed_reason,
+                    activity_retry_status = EXCLUDED.activity_retry_status,
+                    activity_retry_step = EXCLUDED.activity_retry_step",
                 prescription);
         }
 

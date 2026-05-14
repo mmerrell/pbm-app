@@ -117,6 +117,7 @@ services:
       - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://proxy:5003
+      - ApiUrl=http://api:5002
       - USE_VERSIONING=true
       - BUILD_ID=1.0
       - DEPLOYMENT_NAME=pbm-adjudication
@@ -148,6 +149,7 @@ services:
       - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://proxy:5003
+      - ApiUrl=http://api:5002
       - USE_VERSIONING=true
       - BUILD_ID=2.0
       - DEPLOYMENT_NAME=pbm-adjudication

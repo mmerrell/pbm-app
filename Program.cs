@@ -375,8 +375,54 @@ namespace PBMAdjudicationService
                 if (prescription is null) return Results.NotFound();
 
                 prescription.NotificationStatus = "Failed";
+                // Clear retry banner — replaced by the permanent failure banner
+                prescription.ActivityRetryStatus = null; // cleared on notify-failed
+                prescription.ActivityRetryStep   = null;
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+
+                return Results.Ok();
+            });
+
+            // ── Activity retry state ─────────────────────────────────────────────────
+            // Called by the worker's PostAsync helper when an activity HTTP call fails
+            // (before Temporal retries it) and when it succeeds (to clear the state).
+            // Drives the cyan pulsing pip on the prescription timeline in the UI.
+
+            app.MapPost("/api/activity-retrying/{prescriptionId}/{step}", async (
+                string prescriptionId,
+                string step,
+                IPrescriptionRepository repo,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                prescription.ActivityRetryStatus = "Retrying";
+                prescription.ActivityRetryStep   = step;
+                await repo.UpsertPrescriptionAsync(prescription);
+                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"🔄 [retry] Activity '{step}' failed for {prescription.PatientName} — Temporal will retry");
+
+                return Results.Ok();
+            });
+
+            app.MapPost("/api/activity-retry-cleared/{prescriptionId}", async (
+                string prescriptionId,
+                IPrescriptionRepository repo,
+                IHubContext<NotificationHub> hubContext) =>
+            {
+                var prescription = await repo.GetPrescriptionAsync(prescriptionId);
+                if (prescription is null) return Results.NotFound();
+
+                if (prescription.ActivityRetryStatus == "Retrying")
+                {
+                    prescription.ActivityRetryStatus = null;
+                    prescription.ActivityRetryStep   = null;
+                    await repo.UpsertPrescriptionAsync(prescription);
+                    await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
+                }
 
                 return Results.Ok();
             });

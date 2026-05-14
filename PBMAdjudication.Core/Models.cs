@@ -17,7 +17,9 @@ namespace PBMAdjudication.Core
         public decimal? Copay { get; set; }
         public DateTime RequestedDate { get; set; } = DateTime.UtcNow;
         public int? FailedStep { get; set; }
-        public string? NotificationStatus { get; set; } // null, "Retrying", "Sent", "Failed"
+        public string? NotificationStatus { get; set; }   // null, "Retrying", "Sent", "Failed"
+        public string? ActivityRetryStatus { get; set; }  // null, "Retrying", "Cleared"
+        public string? ActivityRetryStep { get; set; }    // e.g. "validate", "adjudicate"
     }
 
     public class DoctorApprovalRequest

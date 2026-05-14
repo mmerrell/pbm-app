@@ -30,7 +30,9 @@ namespace PBMAdjudication.Core
                     requested_date TIMESTAMPTZ NOT NULL,
                     failed_step INT,
                     notification_status TEXT,
-                    approval_needed_reason TEXT
+                    approval_needed_reason TEXT,
+                    activity_retry_status TEXT,
+                    activity_retry_step TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS doctor_approval_requests (
@@ -54,6 +56,12 @@ namespace PBMAdjudication.Core
                     is_denied BOOLEAN NOT NULL DEFAULT FALSE,
                     is_timed_out BOOLEAN NOT NULL DEFAULT FALSE
                 );
+            ");
+
+            // Add columns to existing tables if they don't exist yet (safe migration).
+            await conn.ExecuteAsync(@"
+                ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS activity_retry_status TEXT;
+                ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS activity_retry_step TEXT;
             ");
 
             await SeedDefaultDataAsync(conn);
@@ -129,11 +137,13 @@ namespace PBMAdjudication.Core
                     INSERT INTO prescriptions 
                         (id, patient_id, patient_name, medication, eligible_date, 
                          refills_remaining, status, copay, requested_date, 
-                         failed_step, notification_status, approval_needed_reason)
+                         failed_step, notification_status, approval_needed_reason,
+                         activity_retry_status, activity_retry_step)
                     VALUES 
                         (@Id, @PatientId, @PatientName, @Medication, @EligibleDate,
                          @RefillsRemaining, @Status, @Copay, @RequestedDate,
-                         @FailedStep, @NotificationStatus, @ApprovalNeededReason)
+                         @FailedStep, @NotificationStatus, @ApprovalNeededReason,
+                         @ActivityRetryStatus, @ActivityRetryStep)
                     ON CONFLICT (id) DO NOTHING",
                     rx);
             }

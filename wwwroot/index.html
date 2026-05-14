@@ -1046,7 +1046,20 @@
                 steps.forEach((step, index) => {
                     let pipClass = 'timeline-pip', icon = '', label = '', tooltip = step.name;
 
-                    if (index === failedStep) {
+                    // Retry state is independent of currentStepIndex — Temporal may
+                    // be retrying a step whose status has already advanced past it.
+                    const retryingThisStep = p.activityRetryStatus === 'Retrying' &&
+                        ((index === 0 && p.activityRetryStep === 'validate') ||
+                         (index === 1 && p.activityRetryStep === 'authorize') ||
+                         (index === 2 && (p.activityRetryStep === 'adjudicate' || p.activityRetryStep === 'adjudicate-glp1')) ||
+                         (index === 3 && p.activityRetryStep === 'request-approval') ||
+                         (index === 4 && (p.activityRetryStep === 'submit' || p.activityRetryStep === 'submit-specialty')));
+
+                    if (retryingThisStep && failedStep !== index) {
+                        pipClass += ' retrying'; icon = '↺';
+                        label = `<div class="timeline-label">Retrying</div>`;
+                        tooltip = `${step.name} - Temporal retrying`;
+                    } else if (index === failedStep) {
                         pipClass += ' failed'; icon = '✗';
                         if (p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') {
                             label   = `<div class="timeline-label">Timeout</div>`;
@@ -1106,6 +1119,18 @@
                 else if (p.notificationStatus === 'Failed')   notifBadge = `<div class="notif-badge failed">✗ Notification failed permanently</div>`;
                 else if (p.notificationStatus === 'Sent')     notifBadge = `<div class="notif-badge sent">✓ Patient notified</div>`;
 
+                const RETRY_STEP_LABELS = {
+                    'validate': 'Validate Eligibility', 'authorize': 'Prior Authorization',
+                    'adjudicate': 'Adjudicate Claim', 'adjudicate-glp1': 'Adjudicate GLP-1',
+                    'submit': 'Submit to Pharmacy', 'submit-specialty': 'Submit to Specialty Pharmacy',
+                    'request-approval': 'Doctor Approval',
+                };
+                let retryBadge = '';
+                if (p.activityRetryStatus === 'Retrying') {
+                    const stepLabel = RETRY_STEP_LABELS[p.activityRetryStep] || p.activityRetryStep;
+                    retryBadge = `<div class="notif-badge retrying">↺ Retrying: ${stepLabel} — Temporal will retry automatically</div>`;
+                }
+
                 const cardClass = p.status === 'Completed' ? 'status-completed'
                     : (p.status === 'Denied' || p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') ? 'status-denied'
                     : p.status === 'OnHold' ? 'status-failed'
@@ -1136,6 +1161,7 @@
                         </div>
                         ${generateTimeline(p)}
                         ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}', ${isGlp1Medication(p.medication)})">▶ Process Workflow</button>` : ''}
+                        ${retryBadge}
                         ${notifBadge}
                     </div>`;
             }).join('');
