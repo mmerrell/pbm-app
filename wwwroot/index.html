@@ -1434,6 +1434,20 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageData: imageBase64 })
                 });
+
+                if (response.status === 413) {
+                    // Payload exceeded Temporal's 4 MB gRPC limit.
+                    // Surface this as a visible card error — it's a teaching moment
+                    // about why the Claim Check codec exists.
+                    const err = await response.json().catch(() => ({}));
+                    const detail = err.detail || 'Image payload exceeds Temporal\'s 4 MB gRPC limit.';
+                    addLog(`❌ [claim-check] ${detail} Enable Claim Check above and try again.`);
+
+                    // Mark the prescription as failed so the card reflects the error
+                    await fetch(`/api/on-hold/${prescriptionId}?failedStep=0`, { method: 'POST' });
+                    return;
+                }
+
                 if (!response.ok) throw new Error('Failed to start workflow with image');
                 const result = await response.json();
                 console.log('Temporal workflow (with image) started:', result.workflowId);

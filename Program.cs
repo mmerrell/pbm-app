@@ -20,6 +20,14 @@ namespace PBMAdjudicationService
 
             builder.Services.AddHttpClient();
 
+            // Raise Kestrel's request body size limit to support large image uploads
+            // for the Claim Check demo. Default is 30MB; we set 100MB to give headroom.
+            // Without this, ASP.NET returns HTTP 413 before the codec ever sees the payload.
+            builder.WebHost.ConfigureKestrel(options =>
+            {
+                options.Limits.MaxRequestBodySize = 100 * 1024 * 1024; // 100 MB
+            });
+
             // ── Codec / DataConverter setup ──────────────────────────────────────
             // Two independently toggleable codecs stacked in a CompositePayloadCodec.
             //
@@ -767,6 +775,18 @@ namespace PBMAdjudicationService
                 {
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"⚡ [temporal] Workflow already running for {prescription.PatientName} — attaching");
+                }
+                catch (Temporalio.Exceptions.RpcException ex) when (ex.Message.Contains("received message larger than max"))
+                {
+                    var payloadSizeKb = (request.ImageData?.Length ?? 0) * 3 / 4 / 1024;
+                    var msg = $"❌ [temporal] Payload too large ({payloadSizeKb} KB) — Temporal's 4 MB gRPC limit exceeded. " +
+                              $"Enable Claim Check to offload the image to external storage and send only a token to Temporal.";
+                    await hubContext.Clients.All.SendAsync("ReceiveLog", msg);
+                    return Results.Problem(
+                        title: "Payload too large",
+                        detail: $"Image payload ({payloadSizeKb} KB) exceeds Temporal's 4 MB gRPC limit. " +
+                                $"Enable the Claim Check codec to offload large payloads to external storage.",
+                        statusCode: 413);
                 }
 
                 return Results.Ok(new { workflowId });
