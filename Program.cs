@@ -62,8 +62,6 @@ namespace PBMAdjudicationService
             builder.Services.AddSingleton<IPrescriptionRepository>(
                 new PostgresPrescriptionRepository(connectionString));
 
-            builder.Services.AddScoped<EndpointHelper>();
-
             builder.Services.AddSignalR();
 
             builder.Services.AddCors(options =>
@@ -130,32 +128,44 @@ namespace PBMAdjudicationService
             app.MapPost("/api/config/features",
                 (FeatureFlagsUpdate update, DynamicEncryptionCodec encCodec, DynamicClaimCheckCodec ccCodec) =>
                 {
-                    // Hot-swap: flip flags on the live singleton codec instances.
-                    // No restart required — new workflows immediately use the new settings.
                     encCodec.SetEnabled(update.EnableEncryption);
                     ccCodec.SetEnabled(update.EnableClaimCheck);
                     return Results.Ok(new { saved = true, restartRequired = false });
                 });
 
-            app.MapGet("/api/config", async (IPrescriptionRepository repo) =>
+            // ── Network proxy passthrough ────────────────────────────────────────────
+            // Forwards /api/proxy/* to the network proxy's control API so the frontend
+            // doesn't need to make cross-origin requests to a different port.
+            //
+            // GET  /api/proxy/endpoints        → proxy :5001/endpoints
+            // GET  /api/proxy/rules            → proxy :5001/rules
+            // POST /api/proxy/rules/{endpoint} → proxy :5001/rules/{endpoint}
+            // POST /api/proxy/reset            → proxy :5001/reset
+
+            var proxyControlUrl = builder.Configuration["NetworkProxy:ControlUrl"] ?? "http://proxy:5001";
+
+            app.MapGet("/api/proxy/{**path}", async (string path, IHttpClientFactory factory) =>
             {
-                var configs = await repo.GetAllEndpointConfigsAsync();
-                return Results.Ok(configs);
+                var client = factory.CreateClient();
+                var resp = await client.GetAsync($"{proxyControlUrl}/{path}");
+                var body = await resp.Content.ReadAsStringAsync();
+                return Results.Text(body, "application/json", System.Text.Encoding.UTF8, (int)resp.StatusCode);
             });
 
-            app.MapPost("/api/config/{endpoint}", async (string endpoint, EndpointConfig config, IPrescriptionRepository repo) =>
+            app.MapPost("/api/proxy/{**path}", async (string path, HttpRequest request, IHttpClientFactory factory) =>
             {
-                var existing = await repo.GetEndpointConfigAsync(endpoint);
-                if (existing is null) return Results.NotFound();
-                await repo.UpsertEndpointConfigAsync(endpoint, config);
-                return Results.Ok();
+                var client = factory.CreateClient();
+                var body = await new StreamReader(request.Body).ReadToEndAsync();
+                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                var resp = await client.PostAsync($"{proxyControlUrl}/{path}", content);
+                var respBody = await resp.Content.ReadAsStringAsync();
+                return Results.Text(respBody, "application/json", System.Text.Encoding.UTF8, (int)resp.StatusCode);
             });
 
             // STEP 1: Validate Eligibility
             app.MapPost("/api/validate/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -165,8 +175,6 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Checking eligibility for {prescription.PatientName}");
-
-                await endpointHelper.SimulateEndpointBehavior("validate");
 
                 if (DateTime.UtcNow < prescription.EligibleDate)
                 {
@@ -192,7 +200,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/authorize/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -203,7 +210,6 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Checking prior authorization for {prescription.Medication}");
 
-                await endpointHelper.SimulateEndpointBehavior("authorize");
                 await Task.Delay(100);
 
                 prescription.Status = "Authorized";
@@ -218,7 +224,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/adjudicate/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -229,7 +234,6 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating copay for {prescription.Medication}");
 
-                await endpointHelper.SimulateEndpointBehavior("adjudicate");
                 await Task.Delay(100);
 
                 prescription.Copay = Random.Shared.Next(5, 50);
@@ -246,7 +250,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/request-approval/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -274,11 +277,6 @@ namespace PBMAdjudicationService
                 await repo.UpsertApprovalRequestAsync(approvalRequest);
                 await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approvalRequest);
 
-                await endpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your refill request for {prescription.Medication} is waiting for doctor approval.");
-                await endpointHelper.SendNotification("doctor", "Dr. Smith",
-                    $"Please approve refill for {prescription.PatientName}: {prescription.Medication}");
-
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"📋 [approval] Doctor approval requested for {prescription.PatientName}");
 
@@ -289,7 +287,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/remind-doctor/{approvalId}", async (
                 string approvalId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var approval = await repo.GetApprovalRequestAsync(approvalId);
@@ -297,8 +294,6 @@ namespace PBMAdjudicationService
 
                 approval.ReminderCount++;
                 await repo.UpsertApprovalRequestAsync(approval);
-                await endpointHelper.SendNotification("doctor", "Dr. Smith",
-                    $"REMINDER ({approval.ReminderCount}): Please approve refill for {approval.PatientName}: {approval.Medication}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"🔔 [approval] Reminder #{approval.ReminderCount} sent to doctor for {approval.PatientName}");
@@ -356,22 +351,16 @@ namespace PBMAdjudicationService
                 string recipientName,
                 string message,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                prescription.NotificationStatus = "Retrying";
-                await repo.UpsertPrescriptionAsync(prescription);
-                await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-
-                await endpointHelper.SimulateEndpointBehavior("notify");
-
                 prescription.NotificationStatus = "Sent";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await endpointHelper.SendNotification(recipient, recipientName, message);
+                await hubContext.Clients.All.SendAsync("ReceiveLog",
+                    $"📧 [notify] Sent to {recipient} ({recipientName}): {message}");
 
                 return Results.Ok();
             });
@@ -396,7 +385,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/submit/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -407,15 +395,11 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to pharmacy for {prescription.PatientName}");
 
-                await endpointHelper.SimulateEndpointBehavior("submit");
                 await Task.Delay(100);
 
                 prescription.Status = "Completed";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-
-                await endpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your prescription for {prescription.Medication} has been sent to your pharmacy. Copay: ${prescription.Copay:F2}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"✅ [submit] Prescription completed for {prescription.PatientName}");
@@ -430,7 +414,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/adjudicate-glp1/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -442,10 +425,9 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"💊 [adjudicate-glp1] Routing {prescription.Medication} to specialty adjudication endpoint");
 
-                await endpointHelper.SimulateEndpointBehavior("adjudicate-glp1");
                 await Task.Delay(150);
 
-                prescription.Copay = Random.Shared.Next(50, 200); // GLP-1s carry higher copay
+                prescription.Copay = Random.Shared.Next(50, 200);
                 prescription.Status = "Adjudicated";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
@@ -461,7 +443,6 @@ namespace PBMAdjudicationService
                 string patientName,
                 string medication,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -502,7 +483,6 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(specialtyRequest.PrescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                // Signal the GLP-1 child workflow specifically — note the child workflow ID
                 var glp1WorkflowId = $"{specialtyRequest.PrescriptionId}-glp1";
                 var handle = client.GetWorkflowHandle(glp1WorkflowId);
 
@@ -561,7 +541,6 @@ namespace PBMAdjudicationService
             app.MapPost("/api/submit-specialty/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
-                EndpointHelper endpointHelper,
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
@@ -573,7 +552,6 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"💊 [submit-specialty] Submitting GLP-1 line to specialty pharmacy for {prescription.PatientName}");
 
-                await endpointHelper.SimulateEndpointBehavior("submit-specialty");
                 await Task.Delay(100);
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
@@ -600,7 +578,6 @@ namespace PBMAdjudicationService
                     else
                         eligibleDate = DateTime.UtcNow.AddMinutes(Random.Shared.Next(-120, 0));
 
-                    // Every 5th prescription is a GLP-1 (indices 4, 9, 14, 19)
                     var isGlp1 = (i % 5 == 4);
                     var medication = isGlp1
                         ? glp1Medications[Random.Shared.Next(glp1Medications.Length)]
@@ -630,11 +607,10 @@ namespace PBMAdjudicationService
                 [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                // Terminate all running workflows before resetting DB
                 await foreach (var wf in client.ListWorkflowsAsync("ExecutionStatus = 'Running'"))
                 {
                     try { await client.GetWorkflowHandle(wf.Id).TerminateAsync("Reset All triggered"); }
-                    catch { /* best-effort — ignore if already completed */ }
+                    catch { /* best-effort */ }
                 }
 
                 await repo.ResetAsync();
@@ -715,16 +691,13 @@ namespace PBMAdjudicationService
                     EligibleDate     = prescription.EligibleDate,
                     RefillsRemaining = prescription.RefillsRemaining,
                     IsGlp1           = isGlp1
-                    // ImageData intentionally omitted — passed as a separate workflow
-                    // argument so the ClaimCheckCodec only offloads the image payload,
-                    // leaving the Rx fields visible in Temporal history.
                 };
 
                 if (isGlp1)
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"💊 [temporal] GLP-1 detected — will use split-track adjudication on v2 workers");
 
-                var sizeKb = (request.ImageData?.Length ?? 0) * 3 / 4 / 1024; // rough base64 → bytes
+                var sizeKb = (request.ImageData?.Length ?? 0) * 3 / 4 / 1024;
                 var claimCheckNote = ccCodec.IsEnabled
                     ? $"🗄️ [claim-check] Image (~{sizeKb} KB) will be offloaded to external storage"
                     : $"⚠️ [claim-check] Claim Check DISABLED — {sizeKb} KB image will be sent raw to Temporal";

@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace PBMAdjudication.Core
@@ -22,11 +22,6 @@ namespace PBMAdjudication.Core
         Task<SpecialtyApprovalRequest?> GetSpecialtyApprovalRequestByPrescriptionAsync(string prescriptionId);
         Task<IEnumerable<SpecialtyApprovalRequest>> GetPendingSpecialtyApprovalRequestsAsync();
         Task UpsertSpecialtyApprovalRequestAsync(SpecialtyApprovalRequest request);
-
-        // Endpoint Configs
-        Task<EndpointConfig> GetEndpointConfigAsync(string endpoint);
-        Task<Dictionary<string, EndpointConfig>> GetAllEndpointConfigsAsync();
-        Task UpsertEndpointConfigAsync(string endpoint, EndpointConfig config);
 
         // Admin
         Task ResetAsync();

@@ -18,9 +18,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-    profiles:
-      - default
-      - versioning
 
   # ── Temporal Server ───────────────────────────────────────────────────────
   temporal:
@@ -47,9 +44,6 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
-    profiles:
-      - default
-      - versioning
 
   # ── Temporal UI ───────────────────────────────────────────────────────────
   temporal-ui:
@@ -63,14 +57,26 @@ services:
       - "8233:8080"
     depends_on:
       - temporal
-    profiles:
-      - default
-      - versioning
+
+  # ── Network Proxy ─────────────────────────────────────────────────────────
+  # Transparent HTTP reverse proxy between the worker and the API.
+  # Workers send requests to proxy:5003 instead of api:5002.
+  # The Network Console tab controls fault injection via the control API on
+  # port 5001, proxied through the ASP.NET API at /api/proxy/*.
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    networks:
+      - pbm-net
+    depends_on:
+      api:
+        condition: service_started
 
   # ── PBM Api ───────────────────────────────────────────────────────────────
   api:
     build:
-      context: .  
+      context: .
       dockerfile: Dockerfile.api
     networks:
       - pbm-net
@@ -84,6 +90,7 @@ services:
       - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://localhost:5002
+      - NetworkProxy__ControlUrl=http://proxy:5001
     volumes:
       - claim-check-data:/tmp/claim-check
     depends_on:
@@ -91,43 +98,12 @@ services:
         condition: service_healthy
       temporal:
         condition: service_healthy
-    profiles:
-      - default
-      - versioning
 
-  # ── PBM Worker (unversioned — default, codec demo) ──────────────────────
-  worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.worker
-    networks:
-      - pbm-net
-    environment:
-      - Temporal__Host=temporal:7233
-      - Temporal__EnableEncryption=false
-      - Temporal__EnableClaimCheck=false
-      - Temporal__ClaimCheckStorePath=/tmp/claim-check
-      - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
-      - BaseUrl=http://api:5002
-      - USE_VERSIONING=false
-      - USE_GLP1_SPLIT=false
-    volumes:
-      - claim-check-data:/tmp/claim-check
-    depends_on:
-      postgres:
-        condition: service_healthy
-      temporal:
-        condition: service_healthy
-      api:
-        condition: service_started
-    profiles:
-      - default
-
-  # ── PBM Worker v1 (versioned — original single-track adjudication) ────────
-  # Start the versioning demo with: docker compose --profile versioning up
-  # After v1 is running, promote it as current version:
+  # ── PBM Worker v1 (original single-track adjudication) ───────────────────
+  # versioning-init promotes this as current automatically on startup.
+  # To demo the upgrade: promote v2 manually once Linda Martinez is parked:
   #   temporal worker deployment set-current-version \
-  #     --deployment-name pbm-adjudication --build-id 1.0
+  #     --deployment-name pbm-adjudication --build-id 2.0 --yes
   worker-v1:
     build:
       context: .
@@ -140,7 +116,7 @@ services:
       - Temporal__EnableClaimCheck=false
       - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
-      - BaseUrl=http://api:5002
+      - BaseUrl=http://proxy:5003
       - USE_VERSIONING=true
       - BUILD_ID=1.0
       - DEPLOYMENT_NAME=pbm-adjudication
@@ -154,14 +130,11 @@ services:
         condition: service_healthy
       api:
         condition: service_started
-    profiles:
-      - versioning
+      proxy:
+        condition: service_started
 
-  # ── PBM Worker v2 (versioned — GLP-1 split with child workflows) ──────────
-  # Once a GLP-1 claim is in-flight on v1 (awaiting specialty auth), promote v2:
-  #   temporal worker deployment set-current-version \
-  #     --deployment-name pbm-adjudication --build-id 2.0
-  # New claims route to v2. The in-flight v1 claim stays pinned and completes safely.
+  # ── PBM Worker v2 (GLP-1 split with child workflows) ─────────────────────
+  # Runs alongside v1 from the start. New claims route here once promoted.
   worker-v2:
     build:
       context: .
@@ -174,7 +147,7 @@ services:
       - Temporal__EnableClaimCheck=false
       - Temporal__ClaimCheckStorePath=/tmp/claim-check
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
-      - BaseUrl=http://api:5002
+      - BaseUrl=http://proxy:5003
       - USE_VERSIONING=true
       - BUILD_ID=2.0
       - DEPLOYMENT_NAME=pbm-adjudication
@@ -188,12 +161,12 @@ services:
         condition: service_healthy
       api:
         condition: service_started
-    profiles:
-      - versioning
+      proxy:
+        condition: service_started
 
-  # ── Versioning Init (promotes v1 as current once workers register) ─────────
-  # Runs once at startup in versioning mode. Retries until both workers
-  # have polled and the deployment is visible, then promotes v1 as current.
+  # ── Versioning Init ───────────────────────────────────────────────────────
+  # Waits for both workers to register with Temporal, then promotes v1 as
+  # current so new claims start on the v1 track by default.
   versioning-init:
     image: temporalio/admin-tools:1.29.4
     networks:
@@ -223,8 +196,6 @@ services:
       worker-v2:
         condition: service_started
     restart: "no"
-    profiles:
-      - versioning
 
 networks:
   pbm-net:
@@ -232,4 +203,4 @@ networks:
 
 volumes:
   postgres-data:
-  claim-check-data:   # shared between Api and Worker — both must resolve the same tokens
+  claim-check-data:

@@ -46,12 +46,4 @@ namespace PBMAdjudication.Core
         public bool IsDenied { get; set; } = false;
         public bool IsTimedOut { get; set; } = false;
     }
-
-    public class EndpointConfig
-    {
-        public int FailureRatePercent { get; set; } = 0;
-        public int LatencyMs { get; set; } = 0;
-        public bool CompleteOutage { get; set; } = false;
-    }
-
 }

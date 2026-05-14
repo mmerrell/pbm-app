@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Dapper;
 
 namespace PBMAdjudication.Core
@@ -53,13 +53,6 @@ namespace PBMAdjudication.Core
                     is_approved BOOLEAN NOT NULL DEFAULT FALSE,
                     is_denied BOOLEAN NOT NULL DEFAULT FALSE,
                     is_timed_out BOOLEAN NOT NULL DEFAULT FALSE
-                );
-
-                CREATE TABLE IF NOT EXISTS endpoint_configs (
-                    endpoint TEXT PRIMARY KEY,
-                    failure_rate_percent INT NOT NULL DEFAULT 0,
-                    latency_ms INT NOT NULL DEFAULT 0,
-                    complete_outage BOOLEAN NOT NULL DEFAULT FALSE
                 );
             ");
 
@@ -143,17 +136,6 @@ namespace PBMAdjudication.Core
                          @FailedStep, @NotificationStatus, @ApprovalNeededReason)
                     ON CONFLICT (id) DO NOTHING",
                     rx);
-            }
-
-            // Seed default endpoint configs
-            var endpoints = new[] { "validate", "authorize", "adjudicate", "adjudicate-glp1", "notify", "submit", "submit-specialty" };
-            foreach (var endpoint in endpoints)
-            {
-                await conn.ExecuteAsync(@"
-                    INSERT INTO endpoint_configs (endpoint, failure_rate_percent, latency_ms, complete_outage)
-                    VALUES (@endpoint, 0, 0, FALSE)
-                    ON CONFLICT (endpoint) DO NOTHING",
-                    new { endpoint });
             }
         }
     }

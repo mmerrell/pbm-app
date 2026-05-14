@@ -1,4 +1,4 @@
-﻿using Npgsql;
+using Npgsql;
 using Dapper;
 
 namespace PBMAdjudication.Core
@@ -223,57 +223,6 @@ namespace PBMAdjudication.Core
         }
 
         // ============================================================================
-        // ENDPOINT CONFIGS
-        // ============================================================================
-
-        public async Task<EndpointConfig> GetEndpointConfigAsync(string endpoint)
-        {
-            using var conn = CreateConnection();
-            return await conn.QueryFirstOrDefaultAsync<EndpointConfig>(@"
-                SELECT 
-                    failure_rate_percent AS FailureRatePercent,
-                    latency_ms AS LatencyMs,
-                    complete_outage AS CompleteOutage
-                FROM endpoint_configs
-                WHERE endpoint = @endpoint",
-                new { endpoint }) ?? new EndpointConfig();
-        }
-
-        public async Task<Dictionary<string, EndpointConfig>> GetAllEndpointConfigsAsync()
-        {
-            using var conn = CreateConnection();
-            var rows = await conn.QueryAsync(@"
-        SELECT 
-            endpoint,
-            failure_rate_percent AS FailureRatePercent,
-            latency_ms AS LatencyMs,
-            complete_outage AS CompleteOutage
-        FROM endpoint_configs");
-
-            return rows.ToDictionary(
-                row => (string)row.endpoint,
-                row => new EndpointConfig
-                {
-                    FailureRatePercent = row.FailureRatePercent == null ? 0 : (int)row.FailureRatePercent,
-                    LatencyMs = row.LatencyMs == null ? 0 : (int)row.LatencyMs,
-                    CompleteOutage = row.CompleteOutage == null ? false : (bool)row.CompleteOutage
-                });
-        }
-
-        public async Task UpsertEndpointConfigAsync(string endpoint, EndpointConfig config)
-        {
-            using var conn = CreateConnection();
-            await conn.ExecuteAsync(@"
-                INSERT INTO endpoint_configs (endpoint, failure_rate_percent, latency_ms, complete_outage)
-                VALUES (@endpoint, @FailureRatePercent, @LatencyMs, @CompleteOutage)
-                ON CONFLICT (endpoint) DO UPDATE SET
-                    failure_rate_percent = EXCLUDED.failure_rate_percent,
-                    latency_ms = EXCLUDED.latency_ms,
-                    complete_outage = EXCLUDED.complete_outage",
-                new { endpoint, config.FailureRatePercent, config.LatencyMs, config.CompleteOutage });
-        }
-
-        // ============================================================================
         // ADMIN
         // ============================================================================
 
@@ -283,7 +232,6 @@ namespace PBMAdjudication.Core
             await conn.ExecuteAsync("DELETE FROM specialty_approval_requests");
             await conn.ExecuteAsync("DELETE FROM doctor_approval_requests");
             await conn.ExecuteAsync("DELETE FROM prescriptions");
-            await conn.ExecuteAsync("DELETE FROM endpoint_configs");
 
             var initializer = new DatabaseInitializer(_connectionString);
             await initializer.InitializeAsync();
