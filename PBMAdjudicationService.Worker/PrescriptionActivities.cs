@@ -16,7 +16,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<ValidationResult> ValidateEligibilityAsync(string prescriptionId, string? imageData = null)
+        public async Task<ValidationResult> VerifyAccountAsync(string prescriptionId, string? imageData = null)
         {
             // If an image was attached, log its presence. In a real PBM system this would
             // be the insurance card or Rx scan used to verify eligibility. The Claim Check
@@ -50,7 +50,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<AuthorizationResult> CheckPriorAuthorizationAsync(string prescriptionId)
+        public async Task<AuthorizationResult> ScreenSanctionsAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/authorize/{prescriptionId}", null);
@@ -71,7 +71,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<AdjudicationResult> AdjudicateClaimAsync(string prescriptionId)
+        public async Task<AdjudicationResult> CalculateFxFeesAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/adjudicate/{prescriptionId}", null);
@@ -92,7 +92,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<ApprovalResult> RequestDoctorApprovalAsync(string prescriptionId)
+        public async Task<ApprovalResult> RequestComplianceReviewAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/request-approval/{prescriptionId}", null);
@@ -128,7 +128,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<SubmissionResult> SubmitToPharmacyAsync(string prescriptionId)
+        public async Task<SubmissionResult> SettlePaymentAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/submit/{prescriptionId}", null);
@@ -149,7 +149,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task HandleApprovalTimeoutAsync(string prescriptionId)
+        public async Task HandleReviewTimeoutAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/approval-timeout/{prescriptionId}", null);
@@ -182,7 +182,7 @@ namespace PBMAdjudication.Worker
         // ── GLP-1 specialty activities (v2+) ─────────────────────────────────
 
         [Activity]
-        public async Task<AdjudicationResult> AdjudicateGlp1ClaimAsync(string prescriptionId)
+        public async Task<AdjudicationResult> AdjudicateEddClaimAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/adjudicate-glp1/{prescriptionId}", null);
@@ -201,7 +201,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task RequestSpecialtyPriorAuthAsync(string prescriptionId, string patientName, string medication)
+        public async Task RequestEddReviewAsync(string prescriptionId, string patientName, string medication)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync(
@@ -214,7 +214,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task HandleSpecialtyAuthTimeoutAsync(string prescriptionId)
+        public async Task HandleEddReviewTimeoutAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/specialty-auth-timeout/{prescriptionId}", null);
@@ -224,7 +224,7 @@ namespace PBMAdjudication.Worker
         }
 
         [Activity]
-        public async Task<SubmissionResult> SubmitToSpecialtyPharmacyAsync(string prescriptionId)
+        public async Task<SubmissionResult> SettleEnhancedRailAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
             var response = await client.PostAsync($"{_baseUrl}/api/submit-specialty/{prescriptionId}", null);

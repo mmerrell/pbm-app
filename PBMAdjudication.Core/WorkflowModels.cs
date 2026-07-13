@@ -2,12 +2,12 @@ namespace PBMAdjudication.Core
 {
     public class PrescriptionInput
     {
-        public string PrescriptionId { get; set; } = "";
-        public string PatientName { get; set; } = "";
-        public string Medication { get; set; } = "";
-        public DateTime EligibleDate { get; set; }
-        public int RefillsRemaining { get; set; }
-        public bool IsGlp1 { get; set; } = false;
+        public string TransferId { get; set; } = "";
+        public string CustomerName { get; set; } = "";
+        public string CurrencyCorridor { get; set; } = "";
+        public DateTime FundsAvailableDate { get; set; }
+        public int PriorCleanTransfers { get; set; }
+        public bool IsHighRisk { get; set; } = false;
     }
 
     public class ValidationResult

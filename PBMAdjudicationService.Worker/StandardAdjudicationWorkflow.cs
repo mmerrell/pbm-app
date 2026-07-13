@@ -30,7 +30,7 @@ namespace PBMAdjudication.Worker
             var result = new AdjudicationChildResult { Track = "standard" };
 
             var adjudication = await Workflow.ExecuteActivityAsync(
-                (PrescriptionActivities a) => a.AdjudicateClaimAsync(prescriptionId),
+                (PrescriptionActivities a) => a.CalculateFxFeesAsync(prescriptionId),
                 DefaultOptions);
 
             result.Copay = adjudication.Copay;

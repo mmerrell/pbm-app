@@ -78,7 +78,7 @@ namespace PBMAdjudication.Core
                 {
                     PatientId = "P001",
                     PatientName = "Michael Davis",
-                    Medication = "Omeprazole 20mg",
+                    Medication = "USD → EUR",
                     EligibleDate = DateTime.UtcNow.AddMinutes(2),
                     RefillsRemaining = 5,
                     Status = "Pending"
@@ -87,7 +87,7 @@ namespace PBMAdjudication.Core
                 {
                     PatientId = "P002",
                     PatientName = "John Smith",
-                    Medication = "Lipitor 20mg",
+                    Medication = "USD → GBP",
                     EligibleDate = DateTime.UtcNow.AddDays(-1),
                     RefillsRemaining = 3,
                     Status = "Pending"
@@ -96,7 +96,7 @@ namespace PBMAdjudication.Core
                 {
                     PatientId = "P003",
                     PatientName = "Mary Johnson",
-                    Medication = "Metformin 500mg",
+                    Medication = "USD → SGD",
                     EligibleDate = DateTime.UtcNow.AddMinutes(20),
                     RefillsRemaining = 2,
                     Status = "Pending"
@@ -105,7 +105,7 @@ namespace PBMAdjudication.Core
                 {
                     PatientId = "P004",
                     PatientName = "Robert Williams",
-                    Medication = "Lisinopril 10mg",
+                    Medication = "USD → CAD",
                     EligibleDate = DateTime.UtcNow.AddDays(-5),
                     RefillsRemaining = 0,
                     Status = "Pending"
@@ -114,7 +114,7 @@ namespace PBMAdjudication.Core
                 {
                     PatientId = "P005",
                     PatientName = "Patricia Brown",
-                    Medication = "Atorvastatin 40mg",
+                    Medication = "USD → AUD",
                     EligibleDate = DateTime.UtcNow.AddDays(-3),
                     RefillsRemaining = 1,
                     Status = "Pending"
@@ -123,7 +123,7 @@ namespace PBMAdjudication.Core
                 {
                     PatientId = "P006",
                     PatientName = "Linda Martinez",
-                    Medication = "Ozempic 0.5mg (semaglutide)",
+                    Medication = "USD → INR",
                     EligibleDate = DateTime.UtcNow.AddDays(-1),
                     RefillsRemaining = 0,
                     Status = "Pending"

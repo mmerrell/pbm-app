@@ -12,7 +12,7 @@ namespace PBMAdjudication.Worker
     /// in production).
     /// </summary>
     [Workflow]
-    public class Glp1AdjudicationWorkflow
+    public class EddAdjudicationWorkflow
     {
         private bool specialtyApprovalReceived = false;
         private bool specialtyApprovalDenied = false;
@@ -51,14 +51,14 @@ namespace PBMAdjudication.Worker
 
             // Adjudicate through the specialty endpoint
             var adjudication = await Workflow.ExecuteActivityAsync(
-                (PrescriptionActivities a) => a.AdjudicateGlp1ClaimAsync(prescriptionId),
+                (PrescriptionActivities a) => a.AdjudicateEddClaimAsync(prescriptionId),
                 DefaultOptions);
 
             result.Copay = adjudication.Copay;
 
             // GLP-1s always require specialty prior authorization (new regulatory requirement)
             await Workflow.ExecuteActivityAsync(
-                (PrescriptionActivities a) => a.RequestSpecialtyPriorAuthAsync(prescriptionId, patientName, medication),
+                (PrescriptionActivities a) => a.RequestEddReviewAsync(prescriptionId, patientName, medication),
                 DefaultOptions);
 
             // Notify patient that GLP-1 specialty auth is pending
@@ -67,8 +67,8 @@ namespace PBMAdjudication.Worker
                 await Workflow.ExecuteActivityAsync(
                     (PrescriptionActivities a) => a.SendNotificationAsync(
                         prescriptionId, "patient", patientName,
-                        $"Your GLP-1 medication ({medication}) requires specialty prior authorization. " +
-                        $"A clinical reviewer has been assigned."),
+                        $"Your transfer ({medication}) requires enhanced due diligence review. " +
+                        $"A compliance reviewer has been assigned."),
                     NotificationOptions);
             }
             catch
@@ -89,7 +89,7 @@ namespace PBMAdjudication.Worker
             if (!responseReceived)
             {
                 await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.HandleSpecialtyAuthTimeoutAsync(prescriptionId),
+                    (PrescriptionActivities a) => a.HandleEddReviewTimeoutAsync(prescriptionId),
                     DefaultOptions);
 
                 result.Success = false;
@@ -104,7 +104,7 @@ namespace PBMAdjudication.Worker
 
             // Approved — submit the GLP-1 line to the specialty pharmacy
             await Workflow.ExecuteActivityAsync(
-                (PrescriptionActivities a) => a.SubmitToSpecialtyPharmacyAsync(prescriptionId),
+                (PrescriptionActivities a) => a.SettleEnhancedRailAsync(prescriptionId),
                 DefaultOptions);
 
             result.Success = true;

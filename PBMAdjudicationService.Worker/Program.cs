@@ -44,7 +44,7 @@ var useGlp1Split   = builder.Configuration.GetValue<bool>("USE_GLP1_SPLIT");
 
 // Make the flag available to workflow code via a static — workflows are
 // instantiated by the Temporal worker and can't receive DI constructor args.
-PrescriptionWorkflow.UseGlp1Split = useGlp1Split;
+PaymentWorkflow.UseGlp1Split = useGlp1Split;
 
 Console.WriteLine(useVersioning
     ? $"[Versioning] ENABLED — deployment: {deploymentName}, build: {buildId}"
@@ -70,7 +70,7 @@ builder.Services.AddHostedService(sp =>
     var configuration     = sp.GetRequiredService<IConfiguration>();
     var activities        = new PrescriptionActivities(httpClientFactory, configuration);
 
-    var workerOptions = new TemporalWorkerOptions("prescription-task-queue");
+    var workerOptions = new TemporalWorkerOptions("payment-task-queue");
 
     if (useVersioning)
     {
@@ -85,9 +85,9 @@ builder.Services.AddHostedService(sp =>
         };
     }
 
-    workerOptions.AddWorkflow<PrescriptionWorkflow>();
+    workerOptions.AddWorkflow<PaymentWorkflow>();
     workerOptions.AddWorkflow<StandardAdjudicationWorkflow>();
-    workerOptions.AddWorkflow<Glp1AdjudicationWorkflow>();
+    workerOptions.AddWorkflow<EddAdjudicationWorkflow>();
     workerOptions.AddAllActivities(activities);
 
     return new TemporalWorkerService(client, workerOptions);

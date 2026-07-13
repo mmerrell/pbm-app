@@ -164,7 +164,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Validating";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Checking eligibility for {prescription.PatientName}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Checking account verification for {prescription.PatientName}");
 
                 await endpointHelper.SimulateEndpointBehavior("validate");
 
@@ -172,7 +172,7 @@ namespace PBMAdjudicationService
                 {
                     var waitTime = prescription.EligibleDate - DateTime.UtcNow;
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"⏰ [validate] Not eligible until {prescription.EligibleDate:yyyy-MM-dd HH:mm:ss} (waiting {waitTime.TotalMinutes:F1} minutes)");
+                        $"⏰ [validate] Funds not available until {prescription.EligibleDate:yyyy-MM-dd HH:mm:ss} (waiting {waitTime.TotalMinutes:F1} minutes)");
 
                     prescription.Status = "Waiting";
                     await repo.UpsertPrescriptionAsync(prescription);
@@ -183,7 +183,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Validated";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Prescription eligible for {prescription.PatientName}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [validate] Account verified for {prescription.PatientName}");
 
                 return Results.Ok(new { eligible = true });
             });
@@ -201,7 +201,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Authorizing";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Checking prior authorization for {prescription.Medication}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Running AML/sanctions screening for {prescription.Medication}");
 
                 await endpointHelper.SimulateEndpointBehavior("authorize");
                 await Task.Delay(100);
@@ -209,7 +209,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Authorized";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Authorization approved for {prescription.Medication}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [authorize] Screening cleared for {prescription.Medication}");
 
                 return Results.Ok(new { authorized = true });
             });
@@ -227,7 +227,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Adjudicating";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating copay for {prescription.Medication}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [adjudicate] Calculating FX rate & fees for {prescription.Medication}");
 
                 await endpointHelper.SimulateEndpointBehavior("adjudicate");
                 await Task.Delay(100);
@@ -237,7 +237,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"✅ [adjudicate] Copay calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
+                    $"✅ [adjudicate] Fee calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
 
                 return Results.Ok(new { copay = prescription.Copay });
             });
@@ -256,7 +256,7 @@ namespace PBMAdjudicationService
                 {
                     prescription.ApprovalNeededReason = null;
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"✅ [approval] Refills available ({prescription.RefillsRemaining} remaining), no approval needed");
+                        $"✅ [approval] Prior clean transfers on file ({prescription.RefillsRemaining}), no review needed");
                     return Results.Ok(new { approvalNeeded = false });
                 }
 
@@ -275,12 +275,12 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approvalRequest);
 
                 await endpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your refill request for {prescription.Medication} is waiting for doctor approval.");
-                await endpointHelper.SendNotification("doctor", "Dr. Smith",
-                    $"Please approve refill for {prescription.PatientName}: {prescription.Medication}");
+                    $"Your transfer request for {prescription.Medication} is waiting for compliance review.");
+                await endpointHelper.SendNotification("doctor", "A. Chen, Compliance",
+                    $"Please review transfer for {prescription.PatientName}: {prescription.Medication}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"📋 [approval] Doctor approval requested for {prescription.PatientName}");
+                    $"📋 [approval] Compliance review requested for {prescription.PatientName}");
 
                 return Results.Ok(new { approvalNeeded = true, approvalId = approvalRequest.Id });
             });
@@ -297,11 +297,11 @@ namespace PBMAdjudicationService
 
                 approval.ReminderCount++;
                 await repo.UpsertApprovalRequestAsync(approval);
-                await endpointHelper.SendNotification("doctor", "Dr. Smith",
-                    $"REMINDER ({approval.ReminderCount}): Please approve refill for {approval.PatientName}: {approval.Medication}");
+                await endpointHelper.SendNotification("doctor", "A. Chen, Compliance",
+                    $"REMINDER ({approval.ReminderCount}): Please review transfer for {approval.PatientName}: {approval.Medication}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"🔔 [approval] Reminder #{approval.ReminderCount} sent to doctor for {approval.PatientName}");
+                    $"🔔 [approval] Reminder #{approval.ReminderCount} sent to compliance for {approval.PatientName}");
 
                 return Results.Ok();
             });
@@ -320,23 +320,23 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(approval.PrescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                var workflowId = $"prescription-{prescription.PatientId}-{approval.PrescriptionId}";
+                var workflowId = $"payment-{prescription.PatientId}-{approval.PrescriptionId}";
                 var handle = client.GetWorkflowHandle(workflowId);
 
                 if (approved)
                 {
-                    await handle.SignalAsync((PrescriptionWorkflow wf) => wf.ApproveAsync());
+                    await handle.SignalAsync((PaymentWorkflow wf) => wf.ApproveAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"✅ [temporal] Doctor approved workflow for {prescription.PatientName}");
+                        $"✅ [temporal] Compliance approved transfer for {prescription.PatientName}");
                     approval.IsApproved = true;
                     prescription.Status = "Approved";
                     prescription.RefillsRemaining = 3;
                 }
                 else
                 {
-                    await handle.SignalAsync((PrescriptionWorkflow wf) => wf.DenyAsync());
+                    await handle.SignalAsync((PaymentWorkflow wf) => wf.DenyAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"❌ [temporal] Doctor denied workflow for {prescription.PatientName}");
+                        $"❌ [temporal] Compliance rejected transfer for {prescription.PatientName}");
                     approval.IsDenied = true;
                     prescription.Status = "Denied";
                 }
@@ -405,7 +405,7 @@ namespace PBMAdjudicationService
                 prescription.Status = "Submitting";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to pharmacy for {prescription.PatientName}");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"✅ [submit] Submitting to payment rail for {prescription.PatientName}");
 
                 await endpointHelper.SimulateEndpointBehavior("submit");
                 await Task.Delay(100);
@@ -415,10 +415,10 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
 
                 await endpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your prescription for {prescription.Medication} has been sent to your pharmacy. Copay: ${prescription.Copay:F2}");
+                    $"Your payment for {prescription.Medication} has been submitted for settlement. Fee: ${prescription.Copay:F2}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"✅ [submit] Prescription completed for {prescription.PatientName}");
+                    $"✅ [submit] Payment completed for {prescription.PatientName}");
 
                 return Results.Ok(new { submitted = true });
             });
@@ -440,7 +440,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"💊 [adjudicate-glp1] Routing {prescription.Medication} to specialty adjudication endpoint");
+                    $"💊 [adjudicate-glp1] Routing {prescription.Medication} to EDD adjudication endpoint");
 
                 await endpointHelper.SimulateEndpointBehavior("adjudicate-glp1");
                 await Task.Delay(150);
@@ -450,7 +450,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"💊 [adjudicate-glp1] Specialty copay calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
+                    $"💊 [adjudicate-glp1] EDD fee calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
 
                 return Results.Ok(new { copay = prescription.Copay });
             });
@@ -481,9 +481,9 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("SpecialtyApprovalRequestUpdated", specialtyRequest);
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"🔬 [specialty-auth] GLP-1 specialty prior authorization requested for {patientName} — {medication}");
+                    $"🔬 [specialty-auth] Enhanced due diligence review requested for {patientName} — {medication}");
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"🔬 [specialty-auth] Regulatory requirement: CMS mandate effective Q1 2025 — all GLP-1 claims require clinical review");
+                    $"🔬 [specialty-auth] Regulatory requirement: FinCEN mandate effective Q1 2025 — all high-risk transfers require enhanced due diligence review");
 
                 return Results.Ok(new { specialtyAuthId = specialtyRequest.Id });
             });
@@ -508,17 +508,17 @@ namespace PBMAdjudicationService
 
                 if (approved)
                 {
-                    await handle.SignalAsync((Glp1AdjudicationWorkflow wf) => wf.SpecialtyApproveAsync());
+                    await handle.SignalAsync((EddAdjudicationWorkflow wf) => wf.SpecialtyApproveAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"✅ [temporal] Clinical reviewer approved GLP-1 specialty auth for {prescription.PatientName}");
+                        $"✅ [temporal] Compliance reviewer cleared EDD review for {prescription.PatientName}");
                     specialtyRequest.IsApproved = true;
                     prescription.Status = "SpecialtyAuthApproved";
                 }
                 else
                 {
-                    await handle.SignalAsync((Glp1AdjudicationWorkflow wf) => wf.SpecialtyDenyAsync());
+                    await handle.SignalAsync((EddAdjudicationWorkflow wf) => wf.SpecialtyDenyAsync());
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"❌ [temporal] Clinical reviewer denied GLP-1 specialty auth for {prescription.PatientName}");
+                        $"❌ [temporal] Compliance reviewer rejected EDD review for {prescription.PatientName}");
                     specialtyRequest.IsDenied = true;
                     prescription.Status = "Denied";
                 }
@@ -552,7 +552,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"⏰ [specialty-auth] GLP-1 specialty authorization timed out for {prescription.PatientName} — no clinical reviewer response");
+                    $"⏰ [specialty-auth] EDD review timed out for {prescription.PatientName} — no compliance reviewer response");
 
                 return Results.Ok();
             });
@@ -571,13 +571,13 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"💊 [submit-specialty] Submitting GLP-1 line to specialty pharmacy for {prescription.PatientName}");
+                    $"💊 [submit-specialty] Submitting high-risk transfer to enhanced settlement rail for {prescription.PatientName}");
 
                 await endpointHelper.SimulateEndpointBehavior("submit-specialty");
                 await Task.Delay(100);
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"✅ [submit-specialty] GLP-1 specialty pharmacy submission complete for {prescription.PatientName}");
+                    $"✅ [submit-specialty] Enhanced settlement rail submission complete for {prescription.PatientName}");
 
                 return Results.Ok(new { submitted = true });
             });
@@ -587,8 +587,8 @@ namespace PBMAdjudicationService
                 IPrescriptionRepository repo,
                 IHubContext<NotificationHub> hubContext) =>
             {
-                var medications = new[] { "Lipitor", "Metformin", "Lisinopril", "Atorvastatin", "Omeprazole", "Amlodipine", "Simvastatin" };
-                var glp1Medications = new[] { "Ozempic 0.5mg (semaglutide)", "Wegovy 2.4mg (semaglutide)", "Mounjaro 5mg (tirzepatide)", "Zepbound 5mg (tirzepatide)" };
+                var medications = new[] { "USD → EUR", "USD → GBP", "USD → SGD", "USD → CAD", "USD → AUD", "EUR → JPY", "USD → HKD" };
+                var glp1Medications = new[] { "USD → NZD", "EUR → CHF", "USD → INR", "USD → BRL" };
                 var firstNames = new[] { "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara" };
                 var lastNames = new[] { "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez" };
 
@@ -604,7 +604,7 @@ namespace PBMAdjudicationService
                     var isGlp1 = (i % 5 == 4);
                     var medication = isGlp1
                         ? glp1Medications[Random.Shared.Next(glp1Medications.Length)]
-                        : $"{medications[Random.Shared.Next(medications.Length)]} {Random.Shared.Next(10, 80)}mg";
+                        : medications[Random.Shared.Next(medications.Length)];
 
                     var prescription = new Prescription
                     {
@@ -620,7 +620,7 @@ namespace PBMAdjudicationService
                     await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 }
 
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"📦 [admin] Generated 20 test prescriptions (4 GLP-1)");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"📦 [admin] Generated 20 test payments (4 high-risk/EDD)");
                 return Results.Ok(new { generated = 20 });
             });
 
@@ -643,7 +643,7 @@ namespace PBMAdjudicationService
                 foreach (var rx in prescriptions)
                     await hubContext.Clients.All.SendAsync("PrescriptionUpdated", rx);
 
-                await hubContext.Clients.All.SendAsync("ReceiveLog", $"🔄 [admin] System reset - restored 5 default prescriptions");
+                await hubContext.Clients.All.SendAsync("ReceiveLog", $"🔄 [admin] System reset - restored 5 default payments");
                 return Results.Ok(new { reset = true });
             });
 
@@ -660,27 +660,27 @@ namespace PBMAdjudicationService
 
                 var input = new PrescriptionInput
                 {
-                    PrescriptionId = prescriptionId,
-                    PatientName    = prescription.PatientName,
-                    Medication     = prescription.Medication,
-                    EligibleDate   = prescription.EligibleDate,
-                    RefillsRemaining = prescription.RefillsRemaining,
-                    IsGlp1         = isGlp1
+                    TransferId          = prescriptionId,
+                    CustomerName        = prescription.PatientName,
+                    CurrencyCorridor    = prescription.Medication,
+                    FundsAvailableDate  = prescription.EligibleDate,
+                    PriorCleanTransfers = prescription.RefillsRemaining,
+                    IsHighRisk          = isGlp1
                 };
 
                 if (isGlp1)
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"💊 [temporal] GLP-1 detected — will use split-track adjudication on v2 workers");
+                        $"💊 [temporal] High-risk/EDD transfer detected — will use split-track adjudication on v2 workers");
 
-                var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
+                var workflowId = $"payment-{prescription.PatientId}-{prescriptionId}";
                 try
                 {
                     await client.StartWorkflowAsync(
-                        (PrescriptionWorkflow wf) => wf.RunAsync(input),
+                        (PaymentWorkflow wf) => wf.RunAsync(input),
                         new WorkflowOptions
                         {
                             Id = workflowId,
-                            TaskQueue = "prescription-task-queue"
+                            TaskQueue = "payment-task-queue"
                         });
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"🚀 [temporal] Started workflow for {prescription.PatientName}");
@@ -709,12 +709,12 @@ namespace PBMAdjudicationService
 
                 var input = new PrescriptionInput
                 {
-                    PrescriptionId   = prescriptionId,
-                    PatientName      = prescription.PatientName,
-                    Medication       = prescription.Medication,
-                    EligibleDate     = prescription.EligibleDate,
-                    RefillsRemaining = prescription.RefillsRemaining,
-                    IsGlp1           = isGlp1
+                    TransferId          = prescriptionId,
+                    CustomerName        = prescription.PatientName,
+                    CurrencyCorridor    = prescription.Medication,
+                    FundsAvailableDate  = prescription.EligibleDate,
+                    PriorCleanTransfers = prescription.RefillsRemaining,
+                    IsHighRisk          = isGlp1
                     // ImageData intentionally omitted — passed as a separate workflow
                     // argument so the ClaimCheckCodec only offloads the image payload,
                     // leaving the Rx fields visible in Temporal history.
@@ -722,7 +722,7 @@ namespace PBMAdjudicationService
 
                 if (isGlp1)
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
-                        $"💊 [temporal] GLP-1 detected — will use split-track adjudication on v2 workers");
+                        $"💊 [temporal] High-risk/EDD transfer detected — will use split-track adjudication on v2 workers");
 
                 var sizeKb = (request.ImageData?.Length ?? 0) * 3 / 4 / 1024; // rough base64 → bytes
                 var claimCheckNote = ccCodec.IsEnabled
@@ -731,15 +731,15 @@ namespace PBMAdjudicationService
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog", claimCheckNote);
 
-                var workflowId = $"prescription-{prescription.PatientId}-{prescriptionId}";
+                var workflowId = $"payment-{prescription.PatientId}-{prescriptionId}";
                 try
                 {
                     await client.StartWorkflowAsync(
-                        (PrescriptionWorkflow wf) => wf.RunAsync(input, request.ImageData),
+                        (PaymentWorkflow wf) => wf.RunAsync(input, request.ImageData),
                         new WorkflowOptions
                         {
                             Id = workflowId,
-                            TaskQueue = "prescription-task-queue"
+                            TaskQueue = "payment-task-queue"
                         });
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"🚀 [temporal] Started workflow for {prescription.PatientName}");
@@ -762,7 +762,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"📝 [admin] Created new prescription for {prescription.PatientName}");
+                    $"📝 [admin] Created new payment for {prescription.PatientName}");
                 return Results.Ok(prescription);
             });
 
@@ -787,7 +787,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"⏰ [approval] Approval timeout for {prescription.PatientName} - no response from doctor");
+                    $"⏰ [approval] Review timeout for {prescription.PatientName} - no response from compliance");
 
                 return Results.Ok();
             });
@@ -807,7 +807,7 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"⚠️ [admin] Prescription on hold for {prescription.PatientName} - pharmacy submission failed, awaiting manual intervention");
+                    $"⚠️ [admin] Payment on hold for {prescription.PatientName} - settlement failed, awaiting manual intervention");
 
                 return Results.Ok();
             });

@@ -5,11 +5,11 @@ using PBMAdjudication.Core;
 namespace PBMAdjudication.Worker
 {
     [Workflow]
-    public class PrescriptionWorkflow
+    public class PaymentWorkflow
     {
         /// <summary>
         /// Set at worker startup from the USE_GLP1_SPLIT environment variable.
-        /// false = v1 behavior (single-track, ignores IsGlp1 flag)
+        /// false = v1 behavior (single-track, ignores IsHighRisk flag)
         /// true  = v2 behavior (GLP-1 prescriptions split into parallel child workflows)
         /// </summary>
         public static bool UseGlp1Split { get; set; } = false;
@@ -50,7 +50,7 @@ namespace PBMAdjudication.Worker
             try
             {
                 var validated = await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.ValidateEligibilityAsync(input.PrescriptionId, imageData),
+                    (PrescriptionActivities a) => a.VerifyAccountAsync(input.TransferId, imageData),
                     DefaultActivityOptions);
 
                 if (!validated.Eligible && validated.EligibleDate.HasValue)
@@ -61,13 +61,13 @@ namespace PBMAdjudication.Worker
                         await Workflow.DelayAsync(waitTime);
 
                     validated = await Workflow.ExecuteActivityAsync(
-                        (PrescriptionActivities a) => a.ValidateEligibilityAsync(input.PrescriptionId),
+                        (PrescriptionActivities a) => a.VerifyAccountAsync(input.TransferId),
                         DefaultActivityOptions);
                 }
             }
             catch (Temporalio.Exceptions.ActivityFailureException)
             {
-                await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 0);
+                await HandlePrescriptionFailureAsync(result, input.TransferId, 0);
                 return result;
             }
 
@@ -77,12 +77,12 @@ namespace PBMAdjudication.Worker
             try
             {
                 await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.CheckPriorAuthorizationAsync(input.PrescriptionId),
+                    (PrescriptionActivities a) => a.ScreenSanctionsAsync(input.TransferId),
                     DefaultActivityOptions);
             }
             catch (Temporalio.Exceptions.ActivityFailureException)
             {
-                await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 1);
+                await HandlePrescriptionFailureAsync(result, input.TransferId, 1);
                 return result;
             }
 
@@ -95,23 +95,23 @@ namespace PBMAdjudication.Worker
             // This structural change to the workflow DAG is what makes Worker Versioning
             // necessary: a v1 execution cannot be replayed on v2 code without a
             // non-determinism error.
-            if (input.IsGlp1 && UseGlp1Split)
+            if (input.IsHighRisk && UseGlp1Split)
             {
                 try
                 {
                     var standardTask = Workflow.ExecuteChildWorkflowAsync(
-                        (StandardAdjudicationWorkflow w) => w.RunAsync(input.PrescriptionId),
+                        (StandardAdjudicationWorkflow w) => w.RunAsync(input.TransferId),
                         new ChildWorkflowOptions
                         {
-                            Id = $"{input.PrescriptionId}-standard"
+                            Id = $"{input.TransferId}-standard"
                         });
 
                     var glp1Task = Workflow.ExecuteChildWorkflowAsync(
-                        (Glp1AdjudicationWorkflow w) => w.RunAsync(
-                            input.PrescriptionId, input.PatientName, input.Medication),
+                        (EddAdjudicationWorkflow w) => w.RunAsync(
+                            input.TransferId, input.CustomerName, input.CurrencyCorridor),
                         new ChildWorkflowOptions
                         {
-                            Id = $"{input.PrescriptionId}-glp1"
+                            Id = $"{input.TransferId}-glp1"
                         });
 
                     // Both tracks run in parallel; parent blocks until both complete.
@@ -126,7 +126,7 @@ namespace PBMAdjudication.Worker
                     {
                         // Both tracks complete — submit to pharmacy and mark done
                         await Workflow.ExecuteActivityAsync(
-                            (PrescriptionActivities a) => a.SubmitToPharmacyAsync(input.PrescriptionId),
+                            (PrescriptionActivities a) => a.SettlePaymentAsync(input.TransferId),
                             DefaultActivityOptions);
                         result.Status = "Completed";
                     }
@@ -138,7 +138,7 @@ namespace PBMAdjudication.Worker
                 }
                 catch (Temporalio.Exceptions.ActivityFailureException)
                 {
-                    await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 2);
+                    await HandlePrescriptionFailureAsync(result, input.TransferId, 2);
                     return result;
                 }
             }
@@ -147,7 +147,7 @@ namespace PBMAdjudication.Worker
             try
             {
                 var adjudication = await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.AdjudicateClaimAsync(input.PrescriptionId),
+                    (PrescriptionActivities a) => a.CalculateFxFeesAsync(input.TransferId),
                     DefaultActivityOptions);
 
                 result.Copay = adjudication.Copay;
@@ -155,7 +155,7 @@ namespace PBMAdjudication.Worker
             }
             catch (Temporalio.Exceptions.ActivityFailureException)
             {
-                await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 2);
+                await HandlePrescriptionFailureAsync(result, input.TransferId, 2);
                 return result;
             }
 
@@ -163,7 +163,7 @@ namespace PBMAdjudication.Worker
             try
             {
                 var approvalResult = await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.RequestDoctorApprovalAsync(input.PrescriptionId),
+                    (PrescriptionActivities a) => a.RequestComplianceReviewAsync(input.TransferId),
                     new ActivityOptions { StartToCloseTimeout = TimeSpan.FromMinutes(5) });
 
                 if (approvalResult.ApprovalNeeded)
@@ -174,14 +174,14 @@ namespace PBMAdjudication.Worker
                     {
                         await Workflow.ExecuteActivityAsync(
                             (PrescriptionActivities a) => a.SendNotificationAsync(
-                                input.PrescriptionId, "patient", input.PatientName,
-                                $"Your refill for {input.Medication} is awaiting doctor approval."),
+                                input.TransferId, "patient", input.CustomerName,
+                                $"Your transfer of {input.CurrencyCorridor} is awaiting compliance review."),
                             NotificationActivityOptions);
                     }
                     catch
                     {
                         await Workflow.ExecuteActivityAsync(
-                            (PrescriptionActivities a) => a.MarkNotificationFailedAsync(input.PrescriptionId),
+                            (PrescriptionActivities a) => a.MarkNotificationFailedAsync(input.TransferId),
                             DefaultActivityOptions);
                     }
 
@@ -195,7 +195,7 @@ namespace PBMAdjudication.Worker
                         try
                         {
                             await Workflow.ExecuteActivityAsync(
-                                (PrescriptionActivities a) => a.HandleApprovalTimeoutAsync(input.PrescriptionId),
+                                (PrescriptionActivities a) => a.HandleReviewTimeoutAsync(input.TransferId),
                                 DefaultActivityOptions);
                         }
                         catch (Temporalio.Exceptions.ActivityFailureException)
@@ -220,21 +220,21 @@ namespace PBMAdjudication.Worker
                     {
                         await Workflow.ExecuteActivityAsync(
                             (PrescriptionActivities a) => a.SendNotificationAsync(
-                                input.PrescriptionId, "patient", input.PatientName,
-                                $"Your refill for {input.Medication} has been approved and sent to pharmacy."),
+                                input.TransferId, "patient", input.CustomerName,
+                                $"Your transfer of {input.CurrencyCorridor} has been approved and settled."),
                             NotificationActivityOptions);
                     }
                     catch
                     {
                         await Workflow.ExecuteActivityAsync(
-                            (PrescriptionActivities a) => a.MarkNotificationFailedAsync(input.PrescriptionId),
+                            (PrescriptionActivities a) => a.MarkNotificationFailedAsync(input.TransferId),
                             DefaultActivityOptions);
                     }
                 }
             }
             catch (Temporalio.Exceptions.ActivityFailureException)
             {
-                await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 3);
+                await HandlePrescriptionFailureAsync(result, input.TransferId, 3);
                 return result;
             }
 
@@ -242,7 +242,7 @@ namespace PBMAdjudication.Worker
             try
             {
                 await Workflow.ExecuteActivityAsync(
-                    (PrescriptionActivities a) => a.SubmitToPharmacyAsync(input.PrescriptionId),
+                    (PrescriptionActivities a) => a.SettlePaymentAsync(input.TransferId),
                     DefaultActivityOptions);
 
                 result.Status = "Completed";
@@ -252,20 +252,20 @@ namespace PBMAdjudication.Worker
                 {
                     await Workflow.ExecuteActivityAsync(
                         (PrescriptionActivities a) => a.SendNotificationAsync(
-                            input.PrescriptionId, "patient", input.PatientName,
-                            $"Your prescription for {input.Medication} has been submitted to the pharmacy."),
+                            input.TransferId, "patient", input.CustomerName,
+                            $"Your payment for {input.CurrencyCorridor} has been submitted for settlement."),
                         NotificationActivityOptions);
                 }
                 catch (Temporalio.Exceptions.ActivityFailureException)
                 {
                     await Workflow.ExecuteActivityAsync(
-                        (PrescriptionActivities a) => a.MarkNotificationFailedAsync(input.PrescriptionId),
+                        (PrescriptionActivities a) => a.MarkNotificationFailedAsync(input.TransferId),
                         DefaultActivityOptions);
                 }
             }
             catch (Temporalio.Exceptions.ActivityFailureException)
             {
-                await HandlePrescriptionFailureAsync(result, input.PrescriptionId, 4);
+                await HandlePrescriptionFailureAsync(result, input.TransferId, 4);
             }
 
             return result;

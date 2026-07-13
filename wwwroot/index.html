@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PBM Adjudication System</title>
+    <title>Cross-Border Payment Orchestration</title>
     <script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@7.0.14/dist/browser/signalr.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -621,54 +621,54 @@
     <!-- New Request Modal -->
     <div class="modal" id="newRequestModal">
         <div class="modal-content">
-            <div class="modal-header">New Prescription Request</div>
+            <div class="modal-header">New Payment Request</div>
             <div class="form-group">
-                <label for="patientName">Patient Name</label>
+                <label for="patientName">Customer Name</label>
                 <input type="text" id="patientName" placeholder="John Doe">
             </div>
             <div class="form-group">
-                <label for="medication">Medication</label>
+                <label for="medication">Currency Corridor</label>
                 <select id="medication">
-                    <option>Lipitor 20mg</option>
-                    <option>Metformin 500mg</option>
-                    <option>Lisinopril 10mg</option>
-                    <option>Atorvastatin 40mg</option>
-                    <option>Omeprazole 20mg</option>
-                    <option>Amlodipine 5mg</option>
-                    <option>Simvastatin 20mg</option>
-                    <option>Ozempic 0.5mg (semaglutide)</option>
-                    <option>Wegovy 2.4mg (semaglutide)</option>
-                    <option>Mounjaro 5mg (tirzepatide)</option>
-                    <option>Zepbound 5mg (tirzepatide)</option>
+                    <option>USD → EUR</option>
+                    <option>USD → GBP</option>
+                    <option>USD → SGD</option>
+                    <option>USD → CAD</option>
+                    <option>USD → AUD</option>
+                    <option>EUR → JPY</option>
+                    <option>USD → HKD</option>
+                    <option>USD → NZD</option>
+                    <option>EUR → CHF</option>
+                    <option>USD → INR</option>
+                    <option>USD → BRL</option>
                 </select>
             </div>
             <div class="form-group">
-                <label for="eligibleDate">Eligible Date</label>
+                <label for="eligibleDate">Funds Available Date</label>
                 <input type="datetime-local" id="eligibleDate">
             </div>
             <div class="form-group">
-                <label for="refills">Refills Remaining</label>
+                <label for="refills">Prior Clean Transfers</label>
                 <input type="number" id="refills" min="0" max="12" value="3">
             </div>
             <!-- GLP-1 flag: triggers the v2 split-track adjudication path -->
             <div class="form-group">
-                <label>GLP-1 Drug</label>
+                <label>High-Risk / EDD Required</label>
                 <label class="glp1-checkbox-row" for="isGlp1">
                     <input type="checkbox" id="isGlp1">
                     <div class="glp1-checkbox-label">
-                        This prescription contains a GLP-1 medication
-                        <span>Activates specialty adjudication track &amp; mandatory clinical prior auth (v2+ workers)</span>
+                        This transfer is high-risk / requires enhanced due diligence
+                        <span>Large-value, new-beneficiary, or PEP-linked transfers require enhanced due diligence. Activates the EDD compliance track (v2+ workers)</span>
                     </div>
                 </label>
             </div>
             <!-- Claim Check demo: attach an image to trigger large-payload path -->
             <div class="form-group">
-                <label>Attach Image <span style="color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0">(insurance card / Rx scan — triggers Claim Check)</span></label>
+                <label>Attach Document <span style="color: var(--muted); font-weight: 400; text-transform: none; letter-spacing: 0">(proof of funds / ID verification — triggers Claim Check)</span></label>
                 <div class="file-upload-area" id="fileUploadArea">
                     <input type="file" id="imageAttachment" accept="image/*" onchange="handleImageSelect(this)">
                     <div class="file-upload-label" id="fileUploadLabel">
                         <span class="file-icon">📎</span>
-                        <span id="fileUploadText">Click to attach image (optional)</span>
+                        <span id="fileUploadText">Click to attach document (optional)</span>
                     </div>
                 </div>
                 <div class="file-size-warning" id="fileSizeWarning"></div>
@@ -697,12 +697,12 @@
             <div class="panel-header">
                 <span class="header-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-                    Patient Portal
+                    Customer Portal
                 </span>
-                <button class="btn-new-request" onclick="openNewRequestModal()">+ New Request</button>
+                <button class="btn-new-request" onclick="openNewRequestModal()">+ New Payment</button>
             </div>
             <div class="panel-content" id="patientPortal">
-                <div class="empty-state">No prescriptions to display</div>
+                <div class="empty-state">No payments to display</div>
             </div>
         </div>
 
@@ -710,12 +710,12 @@
         <div class="panel">
             <div class="panel-header">
                 <span class="header-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 0 0-2 2v5a6 6 0 0 0 6 6 6 6 0 0 0 6-6V4a2 2 0 0 0-2-2h-1a.2.2 0 1 0 .3.3"/><path d="M8 15v1a6 6 0 0 0 6 6v0a6 6 0 0 0 6-6v-4"/><circle cx="20" cy="10" r="2"/></svg>
-                    Doctor Portal
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>
+                    Compliance Portal
                 </span>
             </div>
             <div class="panel-content" id="doctorPortal">
-                <div class="empty-state">No approval requests</div>
+                <div class="empty-state">No review requests</div>
             </div>
         </div>
 
@@ -731,7 +731,7 @@
             <div class="panel-content">
                 <div class="admin-section">
                     <div class="admin-buttons">
-                        <button class="btn btn-admin" onclick="generateLoad()">Generate 20 Rxs</button>
+                        <button class="btn btn-admin" onclick="generateLoad()">Generate 20 Payments</button>
                         <button class="btn btn-admin btn-reset" onclick="resetEverything()">Reset All</button>
                     </div>
                 </div>
@@ -803,6 +803,28 @@
             const lower = name.toLowerCase();
             return GLP1_KEYWORDS.some(k => lower.includes(k));
         }
+
+        // Display-only mapping from backend status enum values to friendly UI text.
+        // Backend enum values are unchanged — this is purely a frontend label layer.
+        const statusLabels = {
+            Pending: 'Pending',
+            Waiting: 'Waiting',
+            Validated: 'Account Verified',
+            Authorized: 'Screening Cleared',
+            Adjudicated: 'FX Calculated',
+            AdjudicatingGlp1: 'EDD Review In Progress',
+            ApprovalNeeded: 'Review Needed',
+            ApprovalTimeout: 'Review Timeout',
+            Approved: 'Approved',
+            Denied: 'Rejected',
+            Completed: 'Settled',
+            OnHold: 'On Hold',
+            SpecialtyAuthPending: 'EDD Pending',
+            SpecialtyAuthApproved: 'EDD Approved',
+            SpecialtyAuthTimeout: 'EDD Timeout',
+            Submitting: 'Settling',
+            SubmittingSpecialty: 'Settling (Enhanced Rail)'
+        };
 
         async function startConnection() {
             if (isConnecting) return;
@@ -911,7 +933,7 @@
 
         function updateClaimCheckDesc(enabled) {
             const desc = document.getElementById('claimCheckDesc');
-            desc.textContent = enabled ? `ON — images >${CLAIM_CHECK_THRESHOLD_KB} KB offloaded to storage` : 'OFF — large payloads sent raw to Temporal';
+            desc.textContent = enabled ? `ON — documents >${CLAIM_CHECK_THRESHOLD_KB} KB offloaded to storage` : 'OFF — large payloads sent raw to Temporal';
             desc.style.color = enabled ? 'var(--green)' : 'var(--muted)';
         }
 
@@ -927,7 +949,7 @@
                 pendingImageBase64 = null;
                 label.classList.remove('file-selected');
                 uploadArea.classList.remove('has-file');
-                labelText.textContent = 'Click to attach image (optional)';
+                labelText.textContent = 'Click to attach document (optional)';
                 warning.classList.remove('show');
                 return;
             }
@@ -936,7 +958,7 @@
             label.classList.add('file-selected');
             uploadArea.classList.add('has-file');
             if (sizeKb > CLAIM_CHECK_THRESHOLD_KB) {
-                warning.textContent = `⚠ ${sizeKb} KB exceeds ${CLAIM_CHECK_THRESHOLD_KB} KB threshold — Claim Check will offload this if enabled`;
+                warning.textContent = `⚠ ${sizeKb} KB exceeds ${CLAIM_CHECK_THRESHOLD_KB} KB threshold — Claim Check will offload this document if enabled`;
                 warning.className = 'file-size-warning show over-threshold';
             } else {
                 warning.textContent = `${sizeKb} KB — under ${CLAIM_CHECK_THRESHOLD_KB} KB threshold, will pass through inline`;
@@ -987,17 +1009,17 @@
                 new Date(b.requestedDate) - new Date(a.requestedDate));
 
             if (prescriptionList.length === 0) {
-                container.innerHTML = '<div class="empty-state">No prescriptions to display</div>';
+                container.innerHTML = '<div class="empty-state">No payments to display</div>';
                 return;
             }
 
             function generateTimeline(p) {
                 const steps = [
-                    { key: 'validate',   name: 'Validate'   },
-                    { key: 'authorize',  name: 'Authorize'  },
-                    { key: 'adjudicate', name: 'Adjudicate' },
-                    { key: 'approval',   name: 'Approval'   },
-                    { key: 'submit',     name: 'Submit'     }
+                    { key: 'validate',   name: 'Verify'   },
+                    { key: 'authorize',  name: 'Screen'   },
+                    { key: 'adjudicate', name: 'Calculate' },
+                    { key: 'approval',   name: 'Review'   },
+                    { key: 'submit',     name: 'Settle'   }
                 ];
 
                 const glp1Statuses = ['AdjudicatingGlp1', 'SpecialtyAuthPending', 'SpecialtyAuthApproved', 'SpecialtyAuthTimeout', 'SubmittingSpecialty'];
@@ -1044,12 +1066,15 @@
 
                     if (index === failedStep) {
                         pipClass += ' failed'; icon = '✗';
-                        if (p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') {
-                            label   = `<div class="timeline-label">Timeout</div>`;
+                        if (p.status === 'ApprovalTimeout') {
+                            label   = `<div class="timeline-label">Review Timeout</div>`;
+                            tooltip = `${step.name} - Timed out`;
+                        } else if (p.status === 'SpecialtyAuthTimeout') {
+                            label   = `<div class="timeline-label">EDD Timeout</div>`;
                             tooltip = `${step.name} - Timed out`;
                         } else {
-                            label   = `<div class="timeline-label">Denied</div>`;
-                            tooltip = `${step.name} - Denied`;
+                            label   = `<div class="timeline-label">Rejected</div>`;
+                            tooltip = `${step.name} - Rejected`;
                         }
                     } else if (approvalSkipped && index === 3) {
                         pipClass += ' skipped'; icon = '⊘'; tooltip = `${step.name} - Not required`;
@@ -1063,22 +1088,22 @@
                     } else if (index === currentStepIndex) {
                         if (isWaiting && index === 0) {
                             pipClass += ' waiting'; icon = '⏰';
-                            label = `<div class="timeline-label">Not Eligible Yet</div>`;
+                            label = `<div class="timeline-label">Account Not Verified Yet</div>`;
                             tooltip = `${step.name} - Waiting`;
                         } else if (p.status === 'SpecialtyAuthPending' && index === 3) {
                             pipClass += ' specialty'; icon = '🔬';
-                            label = `<div class="timeline-label teal">Specialty Auth</div>`;
-                            tooltip = `${step.name} - Awaiting clinical reviewer`;
+                            label = `<div class="timeline-label teal">EDD Review</div>`;
+                            tooltip = `${step.name} - Awaiting compliance reviewer`;
                         } else if (p.status === 'ApprovalNeeded' && index === 3) {
                             pipClass += ' waiting'; icon = '⏰';
-                            label = `<div class="timeline-label">Awaiting Doctor</div>`;
+                            label = `<div class="timeline-label">Awaiting Compliance</div>`;
                             tooltip = `${step.name} - Pending approval`;
                         } else if (failedStep === index) {
                             pipClass += ' failed'; icon = '✗';
-                            label = `<div class="timeline-label">Denied</div>`; tooltip = `${step.name} - Denied`;
+                            label = `<div class="timeline-label">Rejected</div>`; tooltip = `${step.name} - Rejected`;
                         } else {
                             pipClass += ' current';
-                            label = `<div class="timeline-label">${p.status}</div>`; tooltip = `${step.name} - In Progress`;
+                            label = `<div class="timeline-label">${statusLabels[p.status] || p.status}</div>`; tooltip = `${step.name} - In Progress`;
                         }
                     }
 
@@ -1094,13 +1119,13 @@
 
                 const eligibleDate = new Date(p.eligibleDate);
                 const eligibleText = new Date() >= eligibleDate
-                    ? `<span style="color: var(--green);">✓ Eligible</span>`
+                    ? `<span style="color: var(--green);">✓ Verified</span>`
                     : `<span style="color: var(--amber);">⏰ ${eligibleDate.toLocaleDateString()} ${eligibleDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>`;
 
                 let notifBadge = '';
                 if      (p.notificationStatus === 'Retrying') notifBadge = `<div class="notif-badge retrying">⚠ Notification retrying...</div>`;
                 else if (p.notificationStatus === 'Failed')   notifBadge = `<div class="notif-badge failed">✗ Notification failed permanently</div>`;
-                else if (p.notificationStatus === 'Sent')     notifBadge = `<div class="notif-badge sent">✓ Patient notified</div>`;
+                else if (p.notificationStatus === 'Sent')     notifBadge = `<div class="notif-badge sent">✓ Customer notified</div>`;
 
                 const cardClass = p.status === 'Completed' ? 'status-completed'
                     : (p.status === 'Denied' || p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') ? 'status-denied'
@@ -1108,9 +1133,9 @@
                     : isGlp1Card ? 'status-glp1'
                     : '';
 
-                const glp1Badge = isGlp1Card ? `<span class="glp1-badge">GLP-1</span>` : '';
+                const glp1Badge = isGlp1Card ? `<span class="glp1-badge">High-Risk</span>` : '';
 
-                const workflowId = `prescription-${p.patientId}-${p.id}`;
+                const workflowId = `payment-${p.patientId}-${p.id}`;
                 const workflowUrl = `http://localhost:8233/namespaces/default/workflows/${workflowId}`;
                 const workflowLink = p.status !== 'Pending'
                     ? `<a class="workflow-link" href="${workflowUrl}" target="_blank">⬡ ${workflowId}</a>`
@@ -1127,7 +1152,7 @@
                             <div class="detail-right">${eligibleText}</div>
                         </div>
                         <div class="info-row">
-                            <div class="detail">Refills: ${p.refillsRemaining}</div>
+                            <div class="detail">Prior Transfers: ${p.refillsRemaining}</div>
                             <div class="detail-right">${new Date(p.requestedDate).toLocaleDateString()} ${new Date(p.requestedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
                         ${generateTimeline(p)}
@@ -1159,27 +1184,27 @@
 
             // Specialty prior auth cards — teal, shown first (higher regulatory urgency)
             if (specialtyList.length > 0) {
-                html += `<div class="portal-section-label">🔬 GLP-1 Specialty Prior Auth</div>`;
+                html += `<div class="portal-section-label">🔍 Enhanced Due Diligence (EDD) Review</div>`;
                 html += specialtyList.map(a => `
                     <div class="specialty-card">
                         <h3>${a.patientName}</h3>
                         <div class="medication">${a.medication}</div>
-                        <div class="specialty-label">CMS Specialty Auth Required</div>
+                        <div class="specialty-label">EDD Required</div>
                         <div class="regulatory-note">
-                            CMS mandate: all GLP-1 claims require clinical prior authorization.<br>
-                            This review is separate from the standard pharmacy track.
+                            Regulatory mandate: all high-risk transfers require enhanced due diligence review.<br>
+                            This review is separate from the standard compliance track.
                         </div>
                         <div class="timestamp">Requested: ${new Date(a.requestedAt).toLocaleString()}</div>
                         <div class="approval-buttons">
-                            <button class="btn btn-approve" onclick="handleSpecialtyApproval('${a.id}', true)">✓ Authorize</button>
-                            <button class="btn btn-deny"    onclick="handleSpecialtyApproval('${a.id}', false)">✗ Deny</button>
+                            <button class="btn btn-approve" onclick="handleSpecialtyApproval('${a.id}', true)">✓ Clear</button>
+                            <button class="btn btn-deny"    onclick="handleSpecialtyApproval('${a.id}', false)">✗ Reject</button>
                         </div>
                     </div>`).join('');
             }
 
             // Standard doctor approval cards — amber
             if (doctorList.length > 0) {
-                html += `<div class="portal-section-label">📋 Doctor Approval</div>`;
+                html += `<div class="portal-section-label">📋 Compliance Review</div>`;
                 html += doctorList.map(a => `
                     <div class="approval-card">
                         <h3>${a.patientName}</h3>
@@ -1188,7 +1213,7 @@
                         ${a.reminderCount > 0 ? `<div class="timestamp">Reminders sent: ${a.reminderCount}</div>` : ''}
                         <div class="approval-buttons">
                             <button class="btn btn-approve" onclick="handleApproval('${a.id}', true)">✓ Approve</button>
-                            <button class="btn btn-deny"    onclick="handleApproval('${a.id}', false)">✗ Deny</button>
+                            <button class="btn btn-deny"    onclick="handleApproval('${a.id}', false)">✗ Reject</button>
                         </div>
                     </div>`).join('');
             }
@@ -1201,13 +1226,13 @@
         function renderConfigs() {
             const container = document.getElementById('endpointConfigs');
             const endpoints = [
-                { key: 'validate',        name: 'Validate Eligibility'      },
-                { key: 'authorize',       name: 'Prior Authorization'        },
-                { key: 'adjudicate',      name: 'Adjudicate Claim'           },
-                { key: 'adjudicate-glp1', name: 'Adjudicate GLP-1 (Specialty)' },
+                { key: 'validate',        name: 'Verify Account (KYB)'      },
+                { key: 'authorize',       name: 'AML/Sanctions Screening'        },
+                { key: 'adjudicate',      name: 'FX & Fee Calculation'           },
+                { key: 'adjudicate-glp1', name: 'EDD Review (High-Risk)' },
                 { key: 'notify',          name: 'Notifications'              },
-                { key: 'submit',          name: 'Submit to Pharmacy'         },
-                { key: 'submit-specialty',name: 'Submit to Specialty Pharmacy' }
+                { key: 'submit',          name: 'Settle Payment'         },
+                { key: 'submit-specialty',name: 'Settle via Enhanced Rail' }
             ];
 
             container.innerHTML = endpoints.map(ep => {
@@ -1328,7 +1353,7 @@
             document.getElementById('imageAttachment').value = '';
             document.getElementById('fileUploadLabel').classList.remove('file-selected');
             document.getElementById('fileUploadArea').classList.remove('has-file');
-            document.getElementById('fileUploadText').textContent = 'Click to attach image (optional)';
+            document.getElementById('fileUploadText').textContent = 'Click to attach document (optional)';
             document.getElementById('fileSizeWarning').classList.remove('show');
 
             document.getElementById('newRequestModal').classList.add('show');
@@ -1351,7 +1376,7 @@
             const refills      = parseInt(document.getElementById('refills').value);
             const isGlp1       = document.getElementById('isGlp1').checked;
 
-            if (!patientName) { alert('Please enter a patient name'); return; }
+            if (!patientName) { alert('Please enter a customer name'); return; }
 
             const prescription = {
                 id:               'P' + Date.now(),
