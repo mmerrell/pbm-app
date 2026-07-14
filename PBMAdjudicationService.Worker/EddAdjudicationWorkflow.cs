@@ -45,6 +45,8 @@ namespace PBMAdjudication.Worker
         public async Task<AdjudicationChildResult> RunAsync(
             string prescriptionId,
             string patientName,
+            string recipientName,
+            decimal amount,
             string medication)
         {
             var result = new AdjudicationChildResult { Track = "glp1" };
@@ -56,18 +58,18 @@ namespace PBMAdjudication.Worker
 
             result.Copay = adjudication.Copay;
 
-            // GLP-1s always require specialty prior authorization (new regulatory requirement)
+            // High-risk transfers always require enhanced due diligence review
             await Workflow.ExecuteActivityAsync(
                 (PrescriptionActivities a) => a.RequestEddReviewAsync(prescriptionId, patientName, medication),
                 DefaultOptions);
 
-            // Notify patient that GLP-1 specialty auth is pending
+            // Notify patient that EDD review is pending
             try
             {
                 await Workflow.ExecuteActivityAsync(
                     (PrescriptionActivities a) => a.SendNotificationAsync(
                         prescriptionId, "patient", patientName,
-                        $"Your transfer ({medication}) requires enhanced due diligence review. " +
+                        $"Your transfer of ${amount:N2} ({medication}) to {recipientName} requires enhanced due diligence review. " +
                         $"A compliance reviewer has been assigned."),
                     NotificationOptions);
             }

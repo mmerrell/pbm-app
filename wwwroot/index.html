@@ -171,6 +171,14 @@
             font-family: var(--font-mono);
         }
 
+        .recipient-row {
+            font-size: 12px;
+            color: var(--off-white);
+            margin-bottom: 6px;
+            font-family: var(--font-mono);
+        }
+        .recipient-row .amount { color: var(--green); font-weight: 600; }
+
         .prescription-card.status-glp1 .medication { color: var(--teal); }
 
         /* GLP-1 badge on medication line */
@@ -627,6 +635,14 @@
                 <input type="text" id="patientName" placeholder="John Doe">
             </div>
             <div class="form-group">
+                <label for="recipientName">Recipient Name</label>
+                <input type="text" id="recipientName" placeholder="Jane Doe">
+            </div>
+            <div class="form-group">
+                <label for="amount">Amount (USD)</label>
+                <input type="number" id="amount" min="1" step="0.01" value="1000">
+            </div>
+            <div class="form-group">
                 <label for="medication">Currency Corridor</label>
                 <select id="medication">
                     <option>USD → EUR</option>
@@ -796,14 +812,6 @@
         let pendingImageBase64 = null;
         const CLAIM_CHECK_THRESHOLD_KB = 128;
 
-        // GLP-1 drug name fragments for auto-detection in generate-load path
-        const GLP1_KEYWORDS = ['ozempic', 'wegovy', 'mounjaro', 'zepbound', 'semaglutide', 'tirzepatide', 'liraglutide', 'saxenda', 'victoza', 'rybelsus'];
-
-        function isGlp1Medication(name) {
-            const lower = name.toLowerCase();
-            return GLP1_KEYWORDS.some(k => lower.includes(k));
-        }
-
         // Display-only mapping from backend status enum values to friendly UI text.
         // Backend enum values are unchanged — this is purely a frontend label layer.
         const statusLabels = {
@@ -863,7 +871,7 @@
             updateConnectionStatus();
             if (autoProcessMode) {
                 const toProcess = Object.values(prescriptions).filter(p => p.status === 'Pending');
-                for (const p of toProcess) await processWorkflow(p.id, isGlp1Medication(p.medication));
+                for (const p of toProcess) await processWorkflow(p.id, p.isHighRisk);
             }
         }
 
@@ -1027,7 +1035,7 @@
                 // it's a GLP-1 medication that completed/was denied without going
                 // through the standard doctor approval path (no approvalNeededReason).
                 const isGlp1Flow = glp1Statuses.includes(p.status)
-                    || (isGlp1Medication(p.medication)
+                    || (p.isHighRisk
                         && (p.status === 'Completed' || p.status === 'Denied')
                         && !p.approvalNeededReason);
 
@@ -1115,7 +1123,7 @@
 
             container.innerHTML = prescriptionList.map(p => {
                 const isGlp1Card = ['AdjudicatingGlp1','SpecialtyAuthPending','SpecialtyAuthApproved','SpecialtyAuthTimeout'].includes(p.status)
-                    || isGlp1Medication(p.medication);
+                    || p.isHighRisk;
 
                 const eligibleDate = new Date(p.eligibleDate);
                 const eligibleText = new Date() >= eligibleDate
@@ -1145,6 +1153,7 @@
                     <div class="prescription-card ${cardClass}">
                         ${p.copay ? `<div class="copay-badge">${p.copay.toFixed(2)}</div>` : ''}
                         <h3>${p.patientName}</h3>
+                        <div class="recipient-row">→ ${p.recipientName} &middot; <span class="amount">$${Number(p.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
                         <div class="medication">${p.medication}${glp1Badge}</div>
                         ${workflowLink}
                         <div class="info-row">
@@ -1156,7 +1165,7 @@
                             <div class="detail-right">${new Date(p.requestedDate).toLocaleDateString()} ${new Date(p.requestedDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                         </div>
                         ${generateTimeline(p)}
-                        ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}', ${isGlp1Medication(p.medication)})">▶ Process Workflow</button>` : ''}
+                        ${p.status === 'Pending' ? `<button class="btn-process" onclick="processWorkflow('${p.id}', ${p.isHighRisk})">▶ Process Workflow</button>` : ''}
                         ${notifBadge}
                     </div>`;
             }).join('');
@@ -1188,6 +1197,7 @@
                 html += specialtyList.map(a => `
                     <div class="specialty-card">
                         <h3>${a.patientName}</h3>
+                        <div class="recipient-row">→ ${a.recipientName} &middot; <span class="amount">$${Number(a.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
                         <div class="medication">${a.medication}</div>
                         <div class="specialty-label">EDD Required</div>
                         <div class="regulatory-note">
@@ -1208,6 +1218,7 @@
                 html += doctorList.map(a => `
                     <div class="approval-card">
                         <h3>${a.patientName}</h3>
+                        <div class="recipient-row">→ ${a.recipientName} &middot; <span class="amount">$${Number(a.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
                         <div class="medication">${a.medication}</div>
                         <div class="timestamp">Requested: ${new Date(a.requestedAt).toLocaleString()}</div>
                         ${a.reminderCount > 0 ? `<div class="timestamp">Reminders sent: ${a.reminderCount}</div>` : ''}
@@ -1292,7 +1303,7 @@
                 setTimeout(async () => {
                     const pending = Object.values(prescriptions).filter(p => p.status === 'Pending');
                     for (const p of pending) {
-                        await processWorkflow(p.id, isGlp1Medication(p.medication));
+                        await processWorkflow(p.id, p.isHighRisk);
                         await new Promise(resolve => setTimeout(resolve, 100));
                     }
                 }, 1000);
@@ -1337,17 +1348,17 @@
 
             document.getElementById('patientName').value =
                 `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+            document.getElementById('recipientName').value =
+                `${firstNames[Math.floor(Math.random() * firstNames.length)]} ${lastNames[Math.floor(Math.random() * lastNames.length)]}`;
+            document.getElementById('amount').value = (Math.floor(Math.random() * 14900) + 100).toFixed(2);
             document.getElementById('medication').selectedIndex =
                 Math.floor(Math.random() * document.getElementById('medication').options.length);
             document.getElementById('refills').value = Math.floor(Math.random() * 13);
+            document.getElementById('isGlp1').checked = false;
 
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
             document.getElementById('eligibleDate').value = now.toISOString().slice(0, 16);
-
-            // Auto-check GLP-1 if the selected medication is a GLP-1
-            const selectedMed = document.getElementById('medication').value;
-            document.getElementById('isGlp1').checked = isGlp1Medication(selectedMed);
 
             pendingImageBase64 = null;
             document.getElementById('imageAttachment').value = '';
@@ -1357,33 +1368,32 @@
             document.getElementById('fileSizeWarning').classList.remove('show');
 
             document.getElementById('newRequestModal').classList.add('show');
-
-            // Keep GLP-1 checkbox in sync if user changes medication selection
-            document.getElementById('medication').onchange = function() {
-                document.getElementById('isGlp1').checked = isGlp1Medication(this.value);
-            };
         }
 
         function closeModal() {
             document.getElementById('newRequestModal').classList.remove('show');
-            document.getElementById('medication').onchange = null;
         }
 
         async function submitNewRequest() {
-            const patientName  = document.getElementById('patientName').value;
-            const medication   = document.getElementById('medication').value;
-            const eligibleDate = document.getElementById('eligibleDate').value;
-            const refills      = parseInt(document.getElementById('refills').value);
-            const isGlp1       = document.getElementById('isGlp1').checked;
+            const patientName   = document.getElementById('patientName').value;
+            const recipientName = document.getElementById('recipientName').value;
+            const amount        = parseFloat(document.getElementById('amount').value);
+            const medication    = document.getElementById('medication').value;
+            const eligibleDate  = document.getElementById('eligibleDate').value;
+            const refills       = parseInt(document.getElementById('refills').value);
+            const isGlp1        = document.getElementById('isGlp1').checked;
 
             if (!patientName) { alert('Please enter a customer name'); return; }
+            if (!recipientName) { alert('Please enter a recipient name'); return; }
+            if (!amount || amount <= 0) { alert('Please enter a valid amount'); return; }
 
             const prescription = {
                 id:               'P' + Date.now(),
                 patientId:        'PAT' + Math.random().toString(36).substr(2, 9),
-                patientName, medication,
+                patientName, recipientName, amount, medication,
                 eligibleDate:     new Date(eligibleDate).toISOString(),
                 refillsRemaining: refills,
+                isHighRisk:       isGlp1,
                 status:           'Pending',
                 requestedDate:    new Date().toISOString()
             };

@@ -10,9 +10,12 @@ namespace PBMAdjudication.Core
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string PatientId { get; set; } = "";
         public string PatientName { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public decimal Amount { get; set; }
         public string Medication { get; set; } = "";
         public DateTime EligibleDate { get; set; }
         public int RefillsRemaining { get; set; }
+        public bool IsHighRisk { get; set; } = false;
         public string Status { get; set; } = "Pending";
         public decimal? Copay { get; set; }
         public DateTime RequestedDate { get; set; } = DateTime.UtcNow;
@@ -25,6 +28,8 @@ namespace PBMAdjudication.Core
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string PrescriptionId { get; set; } = "";
         public string PatientName { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public decimal Amount { get; set; }
         public string Medication { get; set; } = "";
         public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
         public int ReminderCount { get; set; } = 0;
@@ -32,7 +37,7 @@ namespace PBMAdjudication.Core
         public bool IsDenied { get; set; } = false;
     }
 
-    // Specialty prior authorization request for GLP-1 medications (v2+).
+    // Enhanced due diligence request for high-risk transfers (v2+).
     // Distinct from DoctorApprovalRequest — different regulatory track,
     // different workflow signal, visually distinct card in the UI.
     public class SpecialtyApprovalRequest
@@ -40,6 +45,8 @@ namespace PBMAdjudication.Core
         public string Id { get; set; } = Guid.NewGuid().ToString();
         public string PrescriptionId { get; set; } = "";
         public string PatientName { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public decimal Amount { get; set; }
         public string Medication { get; set; } = "";
         public DateTime RequestedAt { get; set; } = DateTime.UtcNow;
         public bool IsApproved { get; set; } = false;

@@ -22,10 +22,11 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             return await conn.QueryAsync<Prescription>(@"
-                SELECT 
+                SELECT
                     id AS Id, patient_id AS PatientId, patient_name AS PatientName,
+                    recipient_name AS RecipientName, amount AS Amount,
                     medication AS Medication, eligible_date AS EligibleDate,
-                    refills_remaining AS RefillsRemaining, status AS Status,
+                    refills_remaining AS RefillsRemaining, is_high_risk AS IsHighRisk, status AS Status,
                     copay AS Copay, requested_date AS RequestedDate,
                     failed_step AS FailedStep, notification_status AS NotificationStatus,
                     approval_needed_reason AS ApprovalNeededReason
@@ -37,10 +38,11 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             return await conn.QueryFirstOrDefaultAsync<Prescription>(@"
-                SELECT 
+                SELECT
                     id AS Id, patient_id AS PatientId, patient_name AS PatientName,
+                    recipient_name AS RecipientName, amount AS Amount,
                     medication AS Medication, eligible_date AS EligibleDate,
-                    refills_remaining AS RefillsRemaining, status AS Status,
+                    refills_remaining AS RefillsRemaining, is_high_risk AS IsHighRisk, status AS Status,
                     copay AS Copay, requested_date AS RequestedDate,
                     failed_step AS FailedStep, notification_status AS NotificationStatus,
                     approval_needed_reason AS ApprovalNeededReason
@@ -53,10 +55,11 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             return await conn.QueryAsync<Prescription>(@"
-                SELECT 
+                SELECT
                     id AS Id, patient_id AS PatientId, patient_name AS PatientName,
+                    recipient_name AS RecipientName, amount AS Amount,
                     medication AS Medication, eligible_date AS EligibleDate,
-                    refills_remaining AS RefillsRemaining, status AS Status,
+                    refills_remaining AS RefillsRemaining, is_high_risk AS IsHighRisk, status AS Status,
                     copay AS Copay, requested_date AS RequestedDate,
                     failed_step AS FailedStep, notification_status AS NotificationStatus,
                     approval_needed_reason AS ApprovalNeededReason
@@ -69,20 +72,23 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             await conn.ExecuteAsync(@"
-                INSERT INTO prescriptions 
-                    (id, patient_id, patient_name, medication, eligible_date,
-                     refills_remaining, status, copay, requested_date,
+                INSERT INTO prescriptions
+                    (id, patient_id, patient_name, recipient_name, amount, medication, eligible_date,
+                     refills_remaining, is_high_risk, status, copay, requested_date,
                      failed_step, notification_status, approval_needed_reason)
-                VALUES 
-                    (@Id, @PatientId, @PatientName, @Medication, @EligibleDate,
-                     @RefillsRemaining, @Status, @Copay, @RequestedDate,
+                VALUES
+                    (@Id, @PatientId, @PatientName, @RecipientName, @Amount, @Medication, @EligibleDate,
+                     @RefillsRemaining, @IsHighRisk, @Status, @Copay, @RequestedDate,
                      @FailedStep, @NotificationStatus, @ApprovalNeededReason)
                 ON CONFLICT (id) DO UPDATE SET
                     patient_id = EXCLUDED.patient_id,
                     patient_name = EXCLUDED.patient_name,
+                    recipient_name = EXCLUDED.recipient_name,
+                    amount = EXCLUDED.amount,
                     medication = EXCLUDED.medication,
                     eligible_date = EXCLUDED.eligible_date,
                     refills_remaining = EXCLUDED.refills_remaining,
+                    is_high_risk = EXCLUDED.is_high_risk,
                     status = EXCLUDED.status,
                     copay = EXCLUDED.copay,
                     requested_date = EXCLUDED.requested_date,
@@ -100,9 +106,10 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             return await conn.QueryFirstOrDefaultAsync<DoctorApprovalRequest>(@"
-                SELECT 
+                SELECT
                     id AS Id, prescription_id AS PrescriptionId,
-                    patient_name AS PatientName, medication AS Medication,
+                    patient_name AS PatientName, recipient_name AS RecipientName, amount AS Amount,
+                    medication AS Medication,
                     requested_at AS RequestedAt, reminder_count AS ReminderCount,
                     is_approved AS IsApproved, is_denied AS IsDenied
                 FROM doctor_approval_requests
@@ -114,9 +121,10 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             return await conn.QueryFirstOrDefaultAsync<DoctorApprovalRequest>(@"
-                SELECT 
+                SELECT
                     id AS Id, prescription_id AS PrescriptionId,
-                    patient_name AS PatientName, medication AS Medication,
+                    patient_name AS PatientName, recipient_name AS RecipientName, amount AS Amount,
+                    medication AS Medication,
                     requested_at AS RequestedAt, reminder_count AS ReminderCount,
                     is_approved AS IsApproved, is_denied AS IsDenied
                 FROM doctor_approval_requests
@@ -130,9 +138,10 @@ namespace PBMAdjudication.Core
         {
             using var conn = CreateConnection();
             return await conn.QueryAsync<DoctorApprovalRequest>(@"
-                SELECT 
+                SELECT
                     id AS Id, prescription_id AS PrescriptionId,
-                    patient_name AS PatientName, medication AS Medication,
+                    patient_name AS PatientName, recipient_name AS RecipientName, amount AS Amount,
+                    medication AS Medication,
                     requested_at AS RequestedAt, reminder_count AS ReminderCount,
                     is_approved AS IsApproved, is_denied AS IsDenied
                 FROM doctor_approval_requests
@@ -145,10 +154,10 @@ namespace PBMAdjudication.Core
             using var conn = CreateConnection();
             await conn.ExecuteAsync(@"
                 INSERT INTO doctor_approval_requests
-                    (id, prescription_id, patient_name, medication,
+                    (id, prescription_id, patient_name, recipient_name, amount, medication,
                      requested_at, reminder_count, is_approved, is_denied)
                 VALUES
-                    (@Id, @PrescriptionId, @PatientName, @Medication,
+                    (@Id, @PrescriptionId, @PatientName, @RecipientName, @Amount, @Medication,
                      @RequestedAt, @ReminderCount, @IsApproved, @IsDenied)
                 ON CONFLICT (id) DO UPDATE SET
                     reminder_count = EXCLUDED.reminder_count,
@@ -167,7 +176,8 @@ namespace PBMAdjudication.Core
             return await conn.QueryFirstOrDefaultAsync<SpecialtyApprovalRequest>(@"
                 SELECT
                     id AS Id, prescription_id AS PrescriptionId,
-                    patient_name AS PatientName, medication AS Medication,
+                    patient_name AS PatientName, recipient_name AS RecipientName, amount AS Amount,
+                    medication AS Medication,
                     requested_at AS RequestedAt,
                     is_approved AS IsApproved, is_denied AS IsDenied, is_timed_out AS IsTimedOut
                 FROM specialty_approval_requests
@@ -181,7 +191,8 @@ namespace PBMAdjudication.Core
             return await conn.QueryFirstOrDefaultAsync<SpecialtyApprovalRequest>(@"
                 SELECT
                     id AS Id, prescription_id AS PrescriptionId,
-                    patient_name AS PatientName, medication AS Medication,
+                    patient_name AS PatientName, recipient_name AS RecipientName, amount AS Amount,
+                    medication AS Medication,
                     requested_at AS RequestedAt,
                     is_approved AS IsApproved, is_denied AS IsDenied, is_timed_out AS IsTimedOut
                 FROM specialty_approval_requests
@@ -197,7 +208,8 @@ namespace PBMAdjudication.Core
             return await conn.QueryAsync<SpecialtyApprovalRequest>(@"
                 SELECT
                     id AS Id, prescription_id AS PrescriptionId,
-                    patient_name AS PatientName, medication AS Medication,
+                    patient_name AS PatientName, recipient_name AS RecipientName, amount AS Amount,
+                    medication AS Medication,
                     requested_at AS RequestedAt,
                     is_approved AS IsApproved, is_denied AS IsDenied, is_timed_out AS IsTimedOut
                 FROM specialty_approval_requests
@@ -210,10 +222,10 @@ namespace PBMAdjudication.Core
             using var conn = CreateConnection();
             await conn.ExecuteAsync(@"
                 INSERT INTO specialty_approval_requests
-                    (id, prescription_id, patient_name, medication,
+                    (id, prescription_id, patient_name, recipient_name, amount, medication,
                      requested_at, is_approved, is_denied, is_timed_out)
                 VALUES
-                    (@Id, @PrescriptionId, @PatientName, @Medication,
+                    (@Id, @PrescriptionId, @PatientName, @RecipientName, @Amount, @Medication,
                      @RequestedAt, @IsApproved, @IsDenied, @IsTimedOut)
                 ON CONFLICT (id) DO UPDATE SET
                     is_approved = EXCLUDED.is_approved,

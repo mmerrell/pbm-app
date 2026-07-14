@@ -232,7 +232,9 @@ namespace PBMAdjudicationService
                 await endpointHelper.SimulateEndpointBehavior("adjudicate");
                 await Task.Delay(100);
 
-                prescription.Copay = Random.Shared.Next(5, 50);
+                // Fee: ~1.5% of the transfer amount plus a small random variance, floored at $5.
+                var calculatedFee = prescription.Amount * 0.015m + (decimal)(Random.Shared.NextDouble() * 5);
+                prescription.Copay = Math.Max(5m, Math.Round(calculatedFee, 2));
                 prescription.Status = "Adjudicated";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
@@ -269,15 +271,17 @@ namespace PBMAdjudicationService
                 {
                     PrescriptionId = prescriptionId,
                     PatientName = prescription.PatientName,
+                    RecipientName = prescription.RecipientName,
+                    Amount = prescription.Amount,
                     Medication = prescription.Medication
                 };
                 await repo.UpsertApprovalRequestAsync(approvalRequest);
                 await hubContext.Clients.All.SendAsync("ApprovalRequestUpdated", approvalRequest);
 
                 await endpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your transfer request for {prescription.Medication} is waiting for compliance review.");
+                    $"Your transfer of ${prescription.Amount:N2} ({prescription.Medication}) to {prescription.RecipientName} is waiting for compliance review.");
                 await endpointHelper.SendNotification("doctor", "A. Chen, Compliance",
-                    $"Please review transfer for {prescription.PatientName}: {prescription.Medication}");
+                    $"Please review transfer for {prescription.PatientName}: ${prescription.Amount:N2} ({prescription.Medication}) to {prescription.RecipientName}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"📋 [approval] Compliance review requested for {prescription.PatientName}");
@@ -415,7 +419,7 @@ namespace PBMAdjudicationService
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
 
                 await endpointHelper.SendNotification("patient", prescription.PatientName,
-                    $"Your payment for {prescription.Medication} has been submitted for settlement. Fee: ${prescription.Copay:F2}");
+                    $"Your transfer of ${prescription.Amount:N2} ({prescription.Medication}) to {prescription.RecipientName} has been submitted for settlement. Fee: ${prescription.Copay:F2}");
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"✅ [submit] Payment completed for {prescription.PatientName}");
@@ -445,7 +449,9 @@ namespace PBMAdjudicationService
                 await endpointHelper.SimulateEndpointBehavior("adjudicate-glp1");
                 await Task.Delay(150);
 
-                prescription.Copay = Random.Shared.Next(50, 200); // GLP-1s carry higher copay
+                // EDD track carries a higher fee: ~3% of amount plus variance, floored at $50.
+                var calculatedEddFee = prescription.Amount * 0.03m + (decimal)(Random.Shared.NextDouble() * 20);
+                prescription.Copay = Math.Max(50m, Math.Round(calculatedEddFee, 2));
                 prescription.Status = "Adjudicated";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
@@ -475,13 +481,15 @@ namespace PBMAdjudicationService
                 {
                     PrescriptionId = prescriptionId,
                     PatientName = patientName,
+                    RecipientName = prescription.RecipientName,
+                    Amount = prescription.Amount,
                     Medication = medication
                 };
                 await repo.UpsertSpecialtyApprovalRequestAsync(specialtyRequest);
                 await hubContext.Clients.All.SendAsync("SpecialtyApprovalRequestUpdated", specialtyRequest);
 
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"🔬 [specialty-auth] Enhanced due diligence review requested for {patientName} — {medication}");
+                    $"🔬 [specialty-auth] Enhanced due diligence review requested for {patientName} — ${prescription.Amount:N2} to {prescription.RecipientName} ({medication})");
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
                     $"🔬 [specialty-auth] Regulatory requirement: FinCEN mandate effective Q1 2025 — all high-risk transfers require enhanced due diligence review");
 
@@ -600,19 +608,26 @@ namespace PBMAdjudicationService
                     else
                         eligibleDate = DateTime.UtcNow.AddMinutes(Random.Shared.Next(-120, 0));
 
-                    // Every 5th prescription is a GLP-1 (indices 4, 9, 14, 19)
+                    // Every 5th prescription is high-risk / EDD (indices 4, 9, 14, 19)
                     var isGlp1 = (i % 5 == 4);
                     var medication = isGlp1
                         ? glp1Medications[Random.Shared.Next(glp1Medications.Length)]
                         : medications[Random.Shared.Next(medications.Length)];
+                    // High-risk transfers skew toward larger amounts
+                    var amount = isGlp1
+                        ? Random.Shared.Next(25000, 250000)
+                        : Random.Shared.Next(100, 15000);
 
                     var prescription = new Prescription
                     {
                         PatientId = $"P{100 + i}",
                         PatientName = $"{firstNames[Random.Shared.Next(firstNames.Length)]} {lastNames[Random.Shared.Next(lastNames.Length)]}",
+                        RecipientName = $"{firstNames[Random.Shared.Next(firstNames.Length)]} {lastNames[Random.Shared.Next(lastNames.Length)]}",
+                        Amount = amount,
                         Medication = medication,
                         EligibleDate = eligibleDate,
                         RefillsRemaining = Random.Shared.Next(0, 4),
+                        IsHighRisk = isGlp1,
                         Status = "Pending"
                     };
 
@@ -658,10 +673,15 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
                 if (prescription is null) return Results.NotFound();
 
+                prescription.IsHighRisk = isGlp1;
+                await repo.UpsertPrescriptionAsync(prescription);
+
                 var input = new PrescriptionInput
                 {
                     TransferId          = prescriptionId,
                     CustomerName        = prescription.PatientName,
+                    RecipientName       = prescription.RecipientName,
+                    Amount              = prescription.Amount,
                     CurrencyCorridor    = prescription.Medication,
                     FundsAvailableDate  = prescription.EligibleDate,
                     PriorCleanTransfers = prescription.RefillsRemaining,
@@ -707,10 +727,15 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
                 if (prescription is null) return Results.NotFound();
 
+                prescription.IsHighRisk = isGlp1;
+                await repo.UpsertPrescriptionAsync(prescription);
+
                 var input = new PrescriptionInput
                 {
                     TransferId          = prescriptionId,
                     CustomerName        = prescription.PatientName,
+                    RecipientName       = prescription.RecipientName,
+                    Amount              = prescription.Amount,
                     CurrencyCorridor    = prescription.Medication,
                     FundsAvailableDate  = prescription.EligibleDate,
                     PriorCleanTransfers = prescription.RefillsRemaining,

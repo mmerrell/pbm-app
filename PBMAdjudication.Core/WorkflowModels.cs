@@ -4,6 +4,8 @@ namespace PBMAdjudication.Core
     {
         public string TransferId { get; set; } = "";
         public string CustomerName { get; set; } = "";
+        public string RecipientName { get; set; } = "";
+        public decimal Amount { get; set; }
         public string CurrencyCorridor { get; set; } = "";
         public DateTime FundsAvailableDate { get; set; }
         public int PriorCleanTransfers { get; set; }

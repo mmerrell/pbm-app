@@ -108,7 +108,7 @@ namespace PBMAdjudication.Worker
 
                     var glp1Task = Workflow.ExecuteChildWorkflowAsync(
                         (EddAdjudicationWorkflow w) => w.RunAsync(
-                            input.TransferId, input.CustomerName, input.CurrencyCorridor),
+                            input.TransferId, input.CustomerName, input.RecipientName, input.Amount, input.CurrencyCorridor),
                         new ChildWorkflowOptions
                         {
                             Id = $"{input.TransferId}-glp1"
@@ -175,7 +175,7 @@ namespace PBMAdjudication.Worker
                         await Workflow.ExecuteActivityAsync(
                             (PrescriptionActivities a) => a.SendNotificationAsync(
                                 input.TransferId, "patient", input.CustomerName,
-                                $"Your transfer of {input.CurrencyCorridor} is awaiting compliance review."),
+                                $"Your transfer of ${input.Amount:N2} ({input.CurrencyCorridor}) to {input.RecipientName} is awaiting compliance review."),
                             NotificationActivityOptions);
                     }
                     catch
@@ -221,7 +221,7 @@ namespace PBMAdjudication.Worker
                         await Workflow.ExecuteActivityAsync(
                             (PrescriptionActivities a) => a.SendNotificationAsync(
                                 input.TransferId, "patient", input.CustomerName,
-                                $"Your transfer of {input.CurrencyCorridor} has been approved and settled."),
+                                $"Your transfer of ${input.Amount:N2} ({input.CurrencyCorridor}) to {input.RecipientName} has been approved and settled."),
                             NotificationActivityOptions);
                     }
                     catch
@@ -253,7 +253,7 @@ namespace PBMAdjudication.Worker
                     await Workflow.ExecuteActivityAsync(
                         (PrescriptionActivities a) => a.SendNotificationAsync(
                             input.TransferId, "patient", input.CustomerName,
-                            $"Your payment for {input.CurrencyCorridor} has been submitted for settlement."),
+                            $"Your transfer of ${input.Amount:N2} ({input.CurrencyCorridor}) to {input.RecipientName} has been submitted for settlement."),
                         NotificationActivityOptions);
                 }
                 catch (Temporalio.Exceptions.ActivityFailureException)
