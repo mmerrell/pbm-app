@@ -34,12 +34,12 @@ namespace PBMAdjudication.Core
         public string? ApprovalId { get; set; }
     }
 
-    // Result returned by each child workflow in the GLP-1 split path (v2+)
+    // Result returned by each child workflow in the EDD split path (v2+)
     public class AdjudicationChildResult
     {
         public bool Success { get; set; }
         public decimal Copay { get; set; }
-        public string Track { get; set; } = ""; // "standard" or "glp1"
+        public string Track { get; set; } = ""; // "standard" or "edd"
     }
 
     public class SubmissionResult

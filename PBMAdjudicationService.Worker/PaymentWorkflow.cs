@@ -8,11 +8,11 @@ namespace PBMAdjudication.Worker
     public class PaymentWorkflow
     {
         /// <summary>
-        /// Set at worker startup from the USE_GLP1_SPLIT environment variable.
+        /// Set at worker startup from the USE_EDD_SPLIT environment variable.
         /// false = v1 behavior (single-track, ignores IsHighRisk flag)
-        /// true  = v2 behavior (GLP-1 prescriptions split into parallel child workflows)
+        /// true  = v2 behavior (high-risk transfers split into parallel child workflows)
         /// </summary>
-        public static bool UseGlp1Split { get; set; } = false;
+        public static bool UseEddSplit { get; set; } = false;
 
         private bool approvalReceived = false;
         private bool approvalDenied = false;
@@ -89,13 +89,13 @@ namespace PBMAdjudication.Worker
             result.Status = "Authorized";
 
             // Step 2: Adjudicate Claim
-            // v2 behavior: GLP-1 prescriptions are split into two parallel child workflows —
+            // v2 behavior: high-risk transfers are split into two parallel child workflows —
             // one for the standard line items (existing adjudication path) and one for the
-            // GLP-1 line item (specialty endpoint + mandatory specialty prior authorization).
+            // high-risk line item (specialty endpoint + mandatory enhanced due diligence review).
             // This structural change to the workflow DAG is what makes Worker Versioning
             // necessary: a v1 execution cannot be replayed on v2 code without a
             // non-determinism error.
-            if (input.IsHighRisk && UseGlp1Split)
+            if (input.IsHighRisk && UseEddSplit)
             {
                 try
                 {
@@ -106,25 +106,25 @@ namespace PBMAdjudication.Worker
                             Id = $"{input.TransferId}-standard"
                         });
 
-                    var glp1Task = Workflow.ExecuteChildWorkflowAsync(
+                    var eddTask = Workflow.ExecuteChildWorkflowAsync(
                         (EddAdjudicationWorkflow w) => w.RunAsync(
                             input.TransferId, input.CustomerName, input.RecipientName, input.Amount, input.CurrencyCorridor),
                         new ChildWorkflowOptions
                         {
-                            Id = $"{input.TransferId}-glp1"
+                            Id = $"{input.TransferId}-edd"
                         });
 
                     // Both tracks run in parallel; parent blocks until both complete.
-                    // The GLP-1 child may be parked on a specialty auth signal for
+                    // The EDD child may be parked on a compliance review signal for
                     // minutes (demo) or days (production).
-                    var results = await Task.WhenAll(standardTask, glp1Task);
+                    var results = await Task.WhenAll(standardTask, eddTask);
 
                     result.Copay = results.Sum(r => r.Copay);
                     result.Success = results.All(r => r.Success);
 
                     if (result.Success)
                     {
-                        // Both tracks complete — submit to pharmacy and mark done
+                        // Both tracks complete — settle the payment and mark done
                         await Workflow.ExecuteActivityAsync(
                             (PrescriptionActivities a) => a.SettlePaymentAsync(input.TransferId),
                             DefaultActivityOptions);
@@ -143,7 +143,7 @@ namespace PBMAdjudication.Worker
                 }
             }
 
-            // Non-GLP-1 path: original single-track adjudication (unchanged from v1)
+            // Standard path: original single-track adjudication (unchanged from v1)
             try
             {
                 var adjudication = await Workflow.ExecuteActivityAsync(

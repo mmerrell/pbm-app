@@ -5,9 +5,9 @@ using PBMAdjudication.Core;
 namespace PBMAdjudication.Worker
 {
     /// <summary>
-    /// Child workflow (v2+): handles the non-GLP-1 line items when a prescription
-    /// is split at adjudication. Runs the standard adjudication and pharmacy
-    /// submission path — short-lived, no HITL.
+    /// Child workflow (v2+): handles the standard line items when a transfer
+    /// is split at adjudication. Runs the standard adjudication and settlement
+    /// path — short-lived, no HITL.
     /// </summary>
     [Workflow]
     public class StandardAdjudicationWorkflow

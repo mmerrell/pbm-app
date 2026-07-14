@@ -5,11 +5,11 @@ using PBMAdjudication.Core;
 namespace PBMAdjudication.Worker
 {
     /// <summary>
-    /// Child workflow (v2+): handles the GLP-1 line item when a prescription is
-    /// split at adjudication. Always requires specialty prior authorization — a
-    /// human-in-the-loop step reflecting the new regulatory framework for GLP-1
-    /// drugs. Times out after 5 minutes if no signal is received (represents days
-    /// in production).
+    /// Child workflow (v2+): handles the high-risk line item when a transfer is
+    /// split at adjudication. Always requires enhanced due diligence review — a
+    /// human-in-the-loop step reflecting the new regulatory framework for
+    /// high-risk transfers. Times out after 5 minutes if no signal is received
+    /// (represents days in production).
     /// </summary>
     [Workflow]
     public class EddAdjudicationWorkflow
@@ -49,7 +49,7 @@ namespace PBMAdjudication.Worker
             decimal amount,
             string medication)
         {
-            var result = new AdjudicationChildResult { Track = "glp1" };
+            var result = new AdjudicationChildResult { Track = "edd" };
 
             // Adjudicate through the specialty endpoint
             var adjudication = await Workflow.ExecuteActivityAsync(
@@ -104,7 +104,7 @@ namespace PBMAdjudication.Worker
                 return result;
             }
 
-            // Approved — submit the GLP-1 line to the specialty pharmacy
+            // Approved — settle the high-risk line via the enhanced rail
             await Workflow.ExecuteActivityAsync(
                 (PrescriptionActivities a) => a.SettleEnhancedRailAsync(prescriptionId),
                 DefaultOptions);

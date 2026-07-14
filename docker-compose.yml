@@ -110,7 +110,7 @@ services:
       - Temporal__EncryptionKeyBase64=${TEMPORAL_ENCRYPTION_KEY}
       - BaseUrl=http://api:5002
       - USE_VERSIONING=false
-      - USE_GLP1_SPLIT=false
+      - USE_EDD_SPLIT=false
     volumes:
       - claim-check-data:/tmp/claim-check
     depends_on:
@@ -144,7 +144,7 @@ services:
       - USE_VERSIONING=true
       - BUILD_ID=1.0
       - DEPLOYMENT_NAME=pbm-adjudication
-      - USE_GLP1_SPLIT=false
+      - USE_EDD_SPLIT=false
     volumes:
       - claim-check-data:/tmp/claim-check
     depends_on:
@@ -157,8 +157,8 @@ services:
     profiles:
       - versioning
 
-  # ── PBM Worker v2 (versioned — GLP-1 split with child workflows) ──────────
-  # Once a GLP-1 claim is in-flight on v1 (awaiting specialty auth), promote v2:
+  # ── PBM Worker v2 (versioned — EDD split with child workflows) ────────────
+  # Once a high-risk transfer is in-flight on v1 (awaiting compliance review), promote v2:
   #   temporal worker deployment set-current-version \
   #     --deployment-name pbm-adjudication --build-id 2.0
   # New claims route to v2. The in-flight v1 claim stays pinned and completes safely.
@@ -178,7 +178,7 @@ services:
       - USE_VERSIONING=true
       - BUILD_ID=2.0
       - DEPLOYMENT_NAME=pbm-adjudication
-      - USE_GLP1_SPLIT=true
+      - USE_EDD_SPLIT=true
     volumes:
       - claim-check-data:/tmp/claim-check
     depends_on:

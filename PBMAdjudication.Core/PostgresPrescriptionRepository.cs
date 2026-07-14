@@ -167,7 +167,7 @@ namespace PBMAdjudication.Core
         }
 
         // ============================================================================
-        // SPECIALTY APPROVAL REQUESTS (GLP-1, v2+)
+        // SPECIALTY APPROVAL REQUESTS (EDD, v2+)
         // ============================================================================
 
         public async Task<SpecialtyApprovalRequest?> GetSpecialtyApprovalRequestAsync(string id)

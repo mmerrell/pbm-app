@@ -40,18 +40,18 @@ Console.WriteLine(enableClaimCheck
 var buildId        = builder.Configuration["BUILD_ID"] ?? "1.0";
 var deploymentName = builder.Configuration["DEPLOYMENT_NAME"] ?? "pbm-adjudication";
 var useVersioning  = builder.Configuration.GetValue<bool>("USE_VERSIONING");
-var useGlp1Split   = builder.Configuration.GetValue<bool>("USE_GLP1_SPLIT");
+var useEddSplit    = builder.Configuration.GetValue<bool>("USE_EDD_SPLIT");
 
 // Make the flag available to workflow code via a static — workflows are
 // instantiated by the Temporal worker and can't receive DI constructor args.
-PaymentWorkflow.UseGlp1Split = useGlp1Split;
+PaymentWorkflow.UseEddSplit = useEddSplit;
 
 Console.WriteLine(useVersioning
     ? $"[Versioning] ENABLED — deployment: {deploymentName}, build: {buildId}"
     : "[Versioning] DISABLED — running unversioned worker");
-Console.WriteLine(useGlp1Split
-    ? "[GLP-1] Split-track adjudication ENABLED (v2 path)"
-    : "[GLP-1] Split-track adjudication DISABLED (v1 path — standard single-track)");
+Console.WriteLine(useEddSplit
+    ? "[EDD] Split-track adjudication ENABLED (v2 path)"
+    : "[EDD] Split-track adjudication DISABLED (v1 path — standard single-track)");
 // ─────────────────────────────────────────────────────────────────────────────
 
 var temporalHost = builder.Configuration["Temporal:Host"] ?? "localhost:7233";
@@ -79,8 +79,8 @@ builder.Services.AddHostedService(sp =>
             useWorkerVersioning: true)
         {
             // Pinned: each execution stays on the version it started on.
-            // This is the key property that lets v1 GLP-1 claims (still awaiting
-            // specialty auth) continue running safely while v2 handles new claims.
+            // This is the key property that lets v1 high-risk transfers (still awaiting
+            // compliance review) continue running safely while v2 handles new claims.
             DefaultVersioningBehavior = VersioningBehavior.Pinned
         };
     }

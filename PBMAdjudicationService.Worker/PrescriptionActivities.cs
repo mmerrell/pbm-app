@@ -179,7 +179,7 @@ namespace PBMAdjudication.Worker
             await client.PostAsync($"{_baseUrl}/api/notify-failed/{prescriptionId}", null);
         }
 
-        // ── GLP-1 specialty activities (v2+) ─────────────────────────────────
+        // ── EDD specialty activities (v2+) ────────────────────────────────────
 
         [Activity]
         public async Task<AdjudicationResult> AdjudicateEddClaimAsync(string prescriptionId)
@@ -188,7 +188,7 @@ namespace PBMAdjudication.Worker
             var response = await client.PostAsync($"{_baseUrl}/api/adjudicate-glp1/{prescriptionId}", null);
 
             if (!response.IsSuccessStatusCode)
-                throw new ApplicationException($"GLP-1 adjudication failed: {response.StatusCode}");
+                throw new ApplicationException($"EDD adjudication failed: {response.StatusCode}");
 
             var json = await response.Content.ReadAsStringAsync();
             var doc = System.Text.Json.JsonDocument.Parse(json);
