@@ -28,7 +28,7 @@ dotnet script -e 'Console.WriteLine(Convert.ToBase64String(System.Security.Crypt
 # Standard mode (codec demo — encryption + claim check)
 docker compose --profile default up --build
 
-# Versioning mode (GLP-1 worker versioning demo)
+# Versioning mode (EDD worker versioning demo)
 docker compose --profile versioning up --build
 ```
 
@@ -88,11 +88,11 @@ Toggle either codec from the Feature Flags section in the Control Panel — no r
 
 **Claim Check** — attach a large image (>128 KB) to a new request. With Claim Check enabled the payload is offloaded to external storage and only a token appears in Temporal history. With it disabled the full bytes flow through Temporal — you'll see the size difference in the UI.
 
-### Worker Versioning (GLP-1 Split Track)
+### Worker Versioning (EDD Split Track)
 
 Requires `docker compose --profile versioning up --build`.
 
-**The story:** GLP-1 medications (Ozempic, Wegovy, Mounjaro, Zepbound) were initially processed through the standard adjudication path. A new CMS mandate requires them to be split into two parallel tracks at adjudication — the GLP-1 line routes to a specialty pharmacy with mandatory clinical prior authorization, while the remaining line items continue through the standard path. This is a structural change to the workflow DAG. Existing in-flight claims cannot be replayed on the new code without a non-determinism error — which is exactly the problem Worker Versioning solves.
+**The story:** high-risk transfers were initially processed through the standard adjudication path. A new regulatory mandate requires them to be split into two parallel tracks at adjudication — the high-risk line routes to an enhanced due diligence (EDD) review with mandatory compliance sign-off, while the remaining line items continue through the standard path. This is a structural change to the workflow DAG. Existing in-flight claims cannot be replayed on the new code without a non-determinism error — which is exactly the problem Worker Versioning solves.
 
 **Step 1 — Establish v1 as current**
 
@@ -105,7 +105,7 @@ temporal worker deployment set-current-version \
 
 **Step 2 — Create a long-lived v1 execution**
 
-Linda Martinez (Ozempic, 0 refills) is seeded by default. Process her workflow. It routes through v1's single-track adjudication, hits the doctor approval step (0 refills), and parks waiting for a signal. This execution is now pinned to v1.
+Linda Martinez (USD → INR, 0 prior clean transfers) is seeded by default. Process her workflow. It routes through v1's single-track adjudication, hits the compliance review step (0 prior clean transfers), and parks waiting for a signal. This execution is now pinned to v1.
 
 **Step 3 — Deploy v2**
 
@@ -114,13 +114,13 @@ temporal worker deployment set-current-version \
   --deployment-name pbm-adjudication --build-id 2.0
 ```
 
-**Step 4 — Submit a new GLP-1 claim**
+**Step 4 — Submit a new high-risk transfer**
 
-Create a new prescription with a GLP-1 medication checked. It routes to v2 and fans out into two child workflows visible in the Temporal UI — one for the standard line items, one for the GLP-1 specialty track. A teal "Specialty Prior Auth" card appears in the Doctor Portal.
+Create a new transfer with the High-Risk / EDD Required box checked. It routes to v2 and fans out into two child workflows visible in the Temporal UI — one for the standard line items, one for the EDD track. A teal "EDD Review" card appears in the Compliance Portal.
 
 **Step 5 — Observe both versions running simultaneously**
 
-Linda's workflow is still alive on v1, waiting for its doctor approval signal (amber card). The new claim is running on v2 with its specialty auth card (teal). Approve or deny each independently.
+Linda's workflow is still alive on v1, waiting for its compliance review signal (amber card). The new transfer is running on v2 with its EDD review card (teal). Approve or reject each independently.
 
 **What this demonstrates:** Temporal routes each workflow's tasks to the version it started on. The structural code change in v2 never touches Linda's execution. No patching, no coordination, no downtime.
 
@@ -130,18 +130,18 @@ Linda's workflow is still alive on v1, waiting for its doctor approval signal (a
 
 ```
 Browser ──► ASP.NET Core API ──► Temporal Server ──► Worker(s)
-                                                      ├── PrescriptionWorkflow
+                                                      ├── PaymentWorkflow
                                                       ├── StandardAdjudicationWorkflow  (v2+)
-                                                      ├── Glp1AdjudicationWorkflow      (v2+)
+                                                      ├── EddAdjudicationWorkflow       (v2+)
                                                       └── PrescriptionActivities
-                                                            ├── ValidateEligibilityAsync
-                                                            ├── CheckPriorAuthorizationAsync
-                                                            ├── AdjudicateClaimAsync
-                                                            ├── AdjudicateGlp1ClaimAsync       (v2+)
-                                                            ├── RequestSpecialtyPriorAuthAsync (v2+)
-                                                            ├── SubmitToSpecialtyPharmacyAsync (v2+)
-                                                            ├── RequestDoctorApprovalAsync
-                                                            ├── SubmitToPharmacyAsync
+                                                            ├── VerifyAccountAsync
+                                                            ├── ScreenSanctionsAsync
+                                                            ├── CalculateFxFeesAsync
+                                                            ├── AdjudicateEddClaimAsync        (v2+)
+                                                            ├── RequestEddReviewAsync          (v2+)
+                                                            ├── SettleEnhancedRailAsync        (v2+)
+                                                            ├── RequestComplianceReviewAsync
+                                                            ├── SettlePaymentAsync
                                                             ├── SendNotificationAsync
                                                             ├── MarkOnHoldAsync
                                                             └── MarkNotificationFailedAsync
