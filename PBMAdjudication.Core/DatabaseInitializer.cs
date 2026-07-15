@@ -175,7 +175,7 @@ namespace PBMAdjudication.Core
             }
 
             // Seed default endpoint configs
-            var endpoints = new[] { "validate", "authorize", "adjudicate", "adjudicate-glp1", "notify", "submit", "submit-specialty" };
+            var endpoints = new[] { "validate", "authorize", "adjudicate", "adjudicate-edd", "notify", "submit", "submit-specialty" };
             foreach (var endpoint in endpoints)
             {
                 await conn.ExecuteAsync(@"

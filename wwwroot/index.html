@@ -34,7 +34,7 @@
             --cyan:        #06b6d4;
             --cyan-bg:     rgba(6, 182, 212, 0.12);
 
-            /* GLP-1 specialty track color — teal, distinct from amber doctor approval */
+            /* EDD specialty track color — teal, distinct from amber compliance review */
             --teal:        #14b8a6;
             --teal-bg:     rgba(20, 184, 166, 0.12);
             --teal-border: rgba(20, 184, 166, 0.30);
@@ -149,8 +149,8 @@
             background: linear-gradient(135deg, var(--space-2) 0%, rgba(245, 158, 11, 0.04) 100%);
         }
 
-        /* GLP-1 cards get a teal left border while in the specialty track */
-        .prescription-card.status-glp1 {
+        /* EDD cards get a teal left border while in the specialty track */
+        .prescription-card.status-edd {
             border-left-color: var(--teal);
             background: linear-gradient(135deg, var(--space-2) 0%, rgba(20, 184, 166, 0.04) 100%);
         }
@@ -179,10 +179,10 @@
         }
         .recipient-row .amount { color: var(--green); font-weight: 600; }
 
-        .prescription-card.status-glp1 .medication { color: var(--teal); }
+        .prescription-card.status-edd .medication { color: var(--teal); }
 
-        /* GLP-1 badge on medication line */
-        .glp1-badge {
+        /* EDD badge on medication line */
+        .edd-badge {
             display: inline-block;
             background: var(--teal-bg);
             color: var(--teal);
@@ -284,7 +284,7 @@
         .timeline-pip.waiting    { background: var(--amber-bg); border-color: var(--amber); color: var(--amber); }
         .timeline-pip.skipped    { background: var(--space-3);  border-color: var(--space-4); color: var(--space-4); font-size: 8px; }
         .timeline-pip.retrying   { background: var(--cyan-bg);  border-color: var(--cyan); color: var(--cyan); animation: pulse 1s infinite; }
-        /* Teal pip for GLP-1 specialty auth waiting state */
+        /* Teal pip for EDD review waiting state */
         .timeline-pip.specialty  { background: var(--teal-bg);  border-color: var(--teal); color: var(--teal); animation: pulse-teal 2s infinite; }
 
         @keyframes pulse {
@@ -454,8 +454,8 @@
 
         .form-group select option { background: var(--space-3); }
 
-        /* GLP-1 checkbox row in modal */
-        .glp1-checkbox-row {
+        /* High-risk / EDD checkbox row in modal */
+        .edd-checkbox-row {
             display: flex;
             align-items: center;
             gap: 10px;
@@ -467,12 +467,12 @@
             transition: border-color 0.15s, background 0.15s;
         }
 
-        .glp1-checkbox-row:has(input:checked) {
+        .edd-checkbox-row:has(input:checked) {
             border-color: var(--teal);
             background: var(--teal-bg);
         }
 
-        .glp1-checkbox-row input[type="checkbox"] {
+        .edd-checkbox-row input[type="checkbox"] {
             width: 16px;
             height: 16px;
             accent-color: var(--teal);
@@ -480,14 +480,14 @@
             flex-shrink: 0;
         }
 
-        .glp1-checkbox-label {
+        .edd-checkbox-label {
             font-size: 12px;
             color: var(--off-white);
             font-weight: 500;
             line-height: 1.4;
         }
 
-        .glp1-checkbox-label span {
+        .edd-checkbox-label span {
             display: block;
             font-size: 10px;
             color: var(--muted);
@@ -666,12 +666,12 @@
                 <label for="refills">Prior Clean Transfers</label>
                 <input type="number" id="refills" min="0" max="12" value="3">
             </div>
-            <!-- GLP-1 flag: triggers the v2 split-track adjudication path -->
+            <!-- High-risk flag: triggers the v2 EDD split-track adjudication path -->
             <div class="form-group">
                 <label>High-Risk / EDD Required</label>
-                <label class="glp1-checkbox-row" for="isGlp1">
-                    <input type="checkbox" id="isGlp1">
-                    <div class="glp1-checkbox-label">
+                <label class="edd-checkbox-row" for="isHighRisk">
+                    <input type="checkbox" id="isHighRisk">
+                    <div class="edd-checkbox-label">
                         This transfer is high-risk / requires enhanced due diligence
                         <span>Large-value, new-beneficiary, or PEP-linked transfers require enhanced due diligence. Activates the EDD compliance track (v2+ workers)</span>
                     </div>
@@ -820,7 +820,7 @@
             Validated: 'Account Verified',
             Authorized: 'Screening Cleared',
             Adjudicated: 'FX Calculated',
-            AdjudicatingGlp1: 'EDD Review In Progress',
+            AdjudicatingEdd: 'EDD Review In Progress',
             ApprovalNeeded: 'Review Needed',
             ApprovalTimeout: 'Review Timeout',
             Approved: 'Approved',
@@ -1030,11 +1030,11 @@
                     { key: 'submit',     name: 'Settle'   }
                 ];
 
-                const glp1Statuses = ['AdjudicatingGlp1', 'SpecialtyAuthPending', 'SpecialtyAuthApproved', 'SpecialtyAuthTimeout', 'SubmittingSpecialty'];
-                // isGlp1Flow: true whenever we're in a GLP-1 specific status, OR
-                // it's a GLP-1 medication that completed/was denied without going
-                // through the standard doctor approval path (no approvalNeededReason).
-                const isGlp1Flow = glp1Statuses.includes(p.status)
+                const eddStatuses = ['AdjudicatingEdd', 'SpecialtyAuthPending', 'SpecialtyAuthApproved', 'SpecialtyAuthTimeout', 'SubmittingSpecialty'];
+                // isEddFlow: true whenever we're in an EDD-specific status, OR
+                // it's a high-risk transfer that completed/was denied without going
+                // through the standard compliance review path (no approvalNeededReason).
+                const isEddFlow = eddStatuses.includes(p.status)
                     || (p.isHighRisk
                         && (p.status === 'Completed' || p.status === 'Denied')
                         && !p.approvalNeededReason);
@@ -1047,7 +1047,7 @@
                 else if (p.status === 'Validating'   || p.status === 'Validated')           { currentStepIndex = 0; }
                 else if (p.status === 'Authorizing'  || p.status === 'Authorized')          { currentStepIndex = 1; }
                 else if (p.status === 'Adjudicating' || p.status === 'Adjudicated' ||
-                         p.status === 'AdjudicatingGlp1')                                   { currentStepIndex = 2; }
+                         p.status === 'AdjudicatingEdd')                                    { currentStepIndex = 2; }
                 else if (p.status === 'SpecialtyAuthPending')                               { currentStepIndex = 3; }
                 else if (p.status === 'SpecialtyAuthApproved')                              { currentStepIndex = 3; }
                 else if (p.status === 'SpecialtyAuthTimeout')                               { currentStepIndex = 3; failedStep = 3; }
@@ -1058,9 +1058,9 @@
                 }
                 else if (p.status === 'Submitting' || p.status === 'SubmittingSpecialty' || p.status === 'Completed') {
                     currentStepIndex = 4;
-                    // For GLP-1 v2 path there's no doctor approval step — mark it skipped.
-                    // For standard path, skip approval only if it wasn't needed (no approvalNeededReason).
-                    if (isGlp1Flow || (!p.approvalNeededReason && !isGlp1Flow)) approvalSkipped = true;
+                    // For the EDD v2 path there's no standard compliance review step — mark it skipped.
+                    // For standard path, skip review only if it wasn't needed (no approvalNeededReason).
+                    if (isEddFlow || (!p.approvalNeededReason && !isEddFlow)) approvalSkipped = true;
                 }
                 else if (p.status === 'OnHold') {
                     currentStepIndex = p.failedStep ?? -1;
@@ -1122,7 +1122,7 @@
             }
 
             container.innerHTML = prescriptionList.map(p => {
-                const isGlp1Card = ['AdjudicatingGlp1','SpecialtyAuthPending','SpecialtyAuthApproved','SpecialtyAuthTimeout'].includes(p.status)
+                const isHighRiskCard = ['AdjudicatingEdd','SpecialtyAuthPending','SpecialtyAuthApproved','SpecialtyAuthTimeout'].includes(p.status)
                     || p.isHighRisk;
 
                 const eligibleDate = new Date(p.eligibleDate);
@@ -1138,10 +1138,10 @@
                 const cardClass = p.status === 'Completed' ? 'status-completed'
                     : (p.status === 'Denied' || p.status === 'ApprovalTimeout' || p.status === 'SpecialtyAuthTimeout') ? 'status-denied'
                     : p.status === 'OnHold' ? 'status-failed'
-                    : isGlp1Card ? 'status-glp1'
+                    : isHighRiskCard ? 'status-edd'
                     : '';
 
-                const glp1Badge = isGlp1Card ? `<span class="glp1-badge">High-Risk</span>` : '';
+                const riskBadge = isHighRiskCard ? `<span class="edd-badge">High-Risk</span>` : '';
 
                 const workflowId = `payment-${p.patientId}-${p.id}`;
                 const workflowUrl = `http://localhost:8233/namespaces/default/workflows/${workflowId}`;
@@ -1154,7 +1154,7 @@
                         ${p.copay ? `<div class="copay-badge">${p.copay.toFixed(2)}</div>` : ''}
                         <h3>${p.patientName}</h3>
                         <div class="recipient-row">→ ${p.recipientName} &middot; <span class="amount">$${Number(p.amount).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span></div>
-                        <div class="medication">${p.medication}${glp1Badge}</div>
+                        <div class="medication">${p.medication}${riskBadge}</div>
                         ${workflowLink}
                         <div class="info-row">
                             <div class="detail">ID: ${p.patientId}</div>
@@ -1240,7 +1240,7 @@
                 { key: 'validate',        name: 'Verify Account (KYB)'      },
                 { key: 'authorize',       name: 'AML/Sanctions Screening'        },
                 { key: 'adjudicate',      name: 'FX & Fee Calculation'           },
-                { key: 'adjudicate-glp1', name: 'EDD Review (High-Risk)' },
+                { key: 'adjudicate-edd', name: 'EDD Review (High-Risk)' },
                 { key: 'notify',          name: 'Notifications'              },
                 { key: 'submit',          name: 'Settle Payment'         },
                 { key: 'submit-specialty',name: 'Settle via Enhanced Rail' }
@@ -1354,7 +1354,7 @@
             document.getElementById('medication').selectedIndex =
                 Math.floor(Math.random() * document.getElementById('medication').options.length);
             document.getElementById('refills').value = Math.floor(Math.random() * 13);
-            document.getElementById('isGlp1').checked = false;
+            document.getElementById('isHighRisk').checked = false;
 
             const now = new Date();
             now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
@@ -1381,7 +1381,7 @@
             const medication    = document.getElementById('medication').value;
             const eligibleDate  = document.getElementById('eligibleDate').value;
             const refills       = parseInt(document.getElementById('refills').value);
-            const isGlp1        = document.getElementById('isGlp1').checked;
+            const isHighRisk     = document.getElementById('isHighRisk').checked;
 
             if (!patientName) { alert('Please enter a customer name'); return; }
             if (!recipientName) { alert('Please enter a recipient name'); return; }
@@ -1393,7 +1393,7 @@
                 patientName, recipientName, amount, medication,
                 eligibleDate:     new Date(eligibleDate).toISOString(),
                 refillsRemaining: refills,
-                isHighRisk:       isGlp1,
+                isHighRisk,
                 status:           'Pending',
                 requestedDate:    new Date().toISOString()
             };
@@ -1404,18 +1404,18 @@
             closeModal();
 
             if (pendingImageBase64) {
-                await processWorkflowWithImage(prescription.id, pendingImageBase64, isGlp1);
+                await processWorkflowWithImage(prescription.id, pendingImageBase64, isHighRisk);
                 pendingImageBase64 = null;
             } else {
-                await processWorkflow(prescription.id, isGlp1);
+                await processWorkflow(prescription.id, isHighRisk);
             }
         }
 
-        async function processWorkflow(prescriptionId, isGlp1 = false) {
+        async function processWorkflow(prescriptionId, isHighRisk = false) {
             activeWorkflows++;
             updateConnectionStatus();
             try {
-                const response = await fetch(`/api/workflow/start/${prescriptionId}?isGlp1=${isGlp1}`, { method: 'POST' });
+                const response = await fetch(`/api/workflow/start/${prescriptionId}?isHighRisk=${isHighRisk}`, { method: 'POST' });
                 if (!response.ok) throw new Error('Failed to start workflow');
                 const result = await response.json();
                 console.log('Temporal workflow started:', result.workflowId);
@@ -1428,11 +1428,11 @@
             }
         }
 
-        async function processWorkflowWithImage(prescriptionId, imageBase64, isGlp1 = false) {
+        async function processWorkflowWithImage(prescriptionId, imageBase64, isHighRisk = false) {
             activeWorkflows++;
             updateConnectionStatus();
             try {
-                const response = await fetch(`/api/workflow/start-with-image/${prescriptionId}?isGlp1=${isGlp1}`, {
+                const response = await fetch(`/api/workflow/start-with-image/${prescriptionId}?isHighRisk=${isHighRisk}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ imageData: imageBase64 })

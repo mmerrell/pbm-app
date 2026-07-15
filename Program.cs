@@ -427,11 +427,11 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { submitted = true });
             });
 
-            // GLP-1 SPECIALTY ENDPOINTS (v2+)
+            // EDD SPECIALTY ENDPOINTS (v2+)
             // ============================================================================
 
-            // STEP 3a: Adjudicate GLP-1 claim through specialty endpoint
-            app.MapPost("/api/adjudicate-glp1/{prescriptionId}", async (
+            // STEP 3a: Adjudicate high-risk claim through EDD endpoint
+            app.MapPost("/api/adjudicate-edd/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
                 EndpointHelper endpointHelper,
@@ -440,13 +440,13 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                prescription.Status = "AdjudicatingGlp1";
+                prescription.Status = "AdjudicatingEdd";
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"💊 [adjudicate-glp1] Routing {prescription.Medication} to EDD adjudication endpoint");
+                    $"💊 [adjudicate-edd] Routing {prescription.Medication} to EDD adjudication endpoint");
 
-                await endpointHelper.SimulateEndpointBehavior("adjudicate-glp1");
+                await endpointHelper.SimulateEndpointBehavior("adjudicate-edd");
                 await Task.Delay(150);
 
                 // EDD track carries a higher fee: ~3% of amount plus variance, floored at $50.
@@ -456,12 +456,12 @@ namespace PBMAdjudicationService
                 await repo.UpsertPrescriptionAsync(prescription);
                 await hubContext.Clients.All.SendAsync("PrescriptionUpdated", prescription);
                 await hubContext.Clients.All.SendAsync("ReceiveLog",
-                    $"💊 [adjudicate-glp1] EDD fee calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
+                    $"💊 [adjudicate-edd] EDD fee calculated: ${prescription.Copay:F2} for {prescription.PatientName}");
 
                 return Results.Ok(new { copay = prescription.Copay });
             });
 
-            // STEP 3b: Request GLP-1 specialty prior authorization (always required)
+            // STEP 3b: Request enhanced due diligence review (always required for high-risk)
             app.MapPost("/api/request-specialty-auth/{prescriptionId}", async (
                 string prescriptionId,
                 string patientName,
@@ -496,7 +496,7 @@ namespace PBMAdjudicationService
                 return Results.Ok(new { specialtyAuthId = specialtyRequest.Id });
             });
 
-            // Clinical reviewer approves/denies GLP-1 specialty authorization
+            // Compliance reviewer approves/denies EDD review
             app.MapPost("/api/specialty-approve/{specialtyAuthId}", async (
                 string specialtyAuthId,
                 bool approved,
@@ -510,9 +510,9 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(specialtyRequest.PrescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                // Signal the GLP-1 child workflow specifically — note the child workflow ID
-                var glp1WorkflowId = $"{specialtyRequest.PrescriptionId}-glp1";
-                var handle = client.GetWorkflowHandle(glp1WorkflowId);
+                // Signal the EDD child workflow specifically — note the child workflow ID
+                var eddWorkflowId = $"{specialtyRequest.PrescriptionId}-edd";
+                var handle = client.GetWorkflowHandle(eddWorkflowId);
 
                 if (approved)
                 {
@@ -539,7 +539,7 @@ namespace PBMAdjudicationService
                 return Results.Ok();
             });
 
-            // GLP-1 specialty auth timeout handler
+            // EDD review timeout handler
             app.MapPost("/api/specialty-auth-timeout/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
@@ -565,7 +565,7 @@ namespace PBMAdjudicationService
                 return Results.Ok();
             });
 
-            // STEP 3c: Submit GLP-1 line to specialty pharmacy
+            // STEP 3c: Submit high-risk line via the enhanced settlement rail
             app.MapPost("/api/submit-specialty/{prescriptionId}", async (
                 string prescriptionId,
                 IPrescriptionRepository repo,
@@ -596,7 +596,7 @@ namespace PBMAdjudicationService
                 IHubContext<NotificationHub> hubContext) =>
             {
                 var medications = new[] { "USD → EUR", "USD → GBP", "USD → SGD", "USD → CAD", "USD → AUD", "EUR → JPY", "USD → HKD" };
-                var glp1Medications = new[] { "USD → NZD", "EUR → CHF", "USD → INR", "USD → BRL" };
+                var eddMedications = new[] { "USD → NZD", "EUR → CHF", "USD → INR", "USD → BRL" };
                 var firstNames = new[] { "James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Barbara" };
                 var lastNames = new[] { "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez" };
 
@@ -609,12 +609,12 @@ namespace PBMAdjudicationService
                         eligibleDate = DateTime.UtcNow.AddMinutes(Random.Shared.Next(-120, 0));
 
                     // Every 5th prescription is high-risk / EDD (indices 4, 9, 14, 19)
-                    var isGlp1 = (i % 5 == 4);
-                    var medication = isGlp1
-                        ? glp1Medications[Random.Shared.Next(glp1Medications.Length)]
+                    var isHighRisk = (i % 5 == 4);
+                    var medication = isHighRisk
+                        ? eddMedications[Random.Shared.Next(eddMedications.Length)]
                         : medications[Random.Shared.Next(medications.Length)];
                     // High-risk transfers skew toward larger amounts
-                    var amount = isGlp1
+                    var amount = isHighRisk
                         ? Random.Shared.Next(25000, 250000)
                         : Random.Shared.Next(100, 15000);
 
@@ -627,7 +627,7 @@ namespace PBMAdjudicationService
                         Medication = medication,
                         EligibleDate = eligibleDate,
                         RefillsRemaining = Random.Shared.Next(0, 4),
-                        IsHighRisk = isGlp1,
+                        IsHighRisk = isHighRisk,
                         Status = "Pending"
                     };
 
@@ -665,7 +665,7 @@ namespace PBMAdjudicationService
             // Start Temporal workflow
             app.MapPost("/api/workflow/start/{prescriptionId}", async (
                 string prescriptionId,
-                bool isGlp1,
+                bool isHighRisk,
                 IPrescriptionRepository repo,
                 [FromServices] ITemporalClient client,
                 IHubContext<NotificationHub> hubContext) =>
@@ -673,7 +673,7 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                prescription.IsHighRisk = isGlp1;
+                prescription.IsHighRisk = isHighRisk;
                 await repo.UpsertPrescriptionAsync(prescription);
 
                 var input = new PrescriptionInput
@@ -685,10 +685,10 @@ namespace PBMAdjudicationService
                     CurrencyCorridor    = prescription.Medication,
                     FundsAvailableDate  = prescription.EligibleDate,
                     PriorCleanTransfers = prescription.RefillsRemaining,
-                    IsHighRisk          = isGlp1
+                    IsHighRisk          = isHighRisk
                 };
 
-                if (isGlp1)
+                if (isHighRisk)
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"💊 [temporal] High-risk/EDD transfer detected — will use split-track adjudication on v2 workers");
 
@@ -717,7 +717,7 @@ namespace PBMAdjudicationService
             // Start Temporal workflow with an attached image (claim check demo path)
             app.MapPost("/api/workflow/start-with-image/{prescriptionId}", async (
                 string prescriptionId,
-                bool isGlp1,
+                bool isHighRisk,
                 WorkflowStartWithImageRequest request,
                 IPrescriptionRepository repo,
                 [FromServices] ITemporalClient client,
@@ -727,7 +727,7 @@ namespace PBMAdjudicationService
                 var prescription = await repo.GetPrescriptionAsync(prescriptionId);
                 if (prescription is null) return Results.NotFound();
 
-                prescription.IsHighRisk = isGlp1;
+                prescription.IsHighRisk = isHighRisk;
                 await repo.UpsertPrescriptionAsync(prescription);
 
                 var input = new PrescriptionInput
@@ -739,13 +739,13 @@ namespace PBMAdjudicationService
                     CurrencyCorridor    = prescription.Medication,
                     FundsAvailableDate  = prescription.EligibleDate,
                     PriorCleanTransfers = prescription.RefillsRemaining,
-                    IsHighRisk          = isGlp1
+                    IsHighRisk          = isHighRisk
                     // ImageData intentionally omitted — passed as a separate workflow
                     // argument so the ClaimCheckCodec only offloads the image payload,
-                    // leaving the Rx fields visible in Temporal history.
+                    // leaving the transfer fields visible in Temporal history.
                 };
 
-                if (isGlp1)
+                if (isHighRisk)
                     await hubContext.Clients.All.SendAsync("ReceiveLog",
                         $"💊 [temporal] High-risk/EDD transfer detected — will use split-track adjudication on v2 workers");
 

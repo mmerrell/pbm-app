@@ -185,7 +185,7 @@ namespace PBMAdjudication.Worker
         public async Task<AdjudicationResult> AdjudicateEddClaimAsync(string prescriptionId)
         {
             var client = _httpClientFactory.CreateClient();
-            var response = await client.PostAsync($"{_baseUrl}/api/adjudicate-glp1/{prescriptionId}", null);
+            var response = await client.PostAsync($"{_baseUrl}/api/adjudicate-edd/{prescriptionId}", null);
 
             if (!response.IsSuccessStatusCode)
                 throw new ApplicationException($"EDD adjudication failed: {response.StatusCode}");
